@@ -5,6 +5,7 @@ date:   2021-11-28 11:18:26 -0800
 categories: CUDA
 ---
 
+
 # 什么是cuBLASDx
 cuBLAS 设备扩展（cuBLASDx）库使您能够在自己的 CUDA kernel 内部执行 cuBLAS 中提供的部分线性代数函数。目前该功能仅限于通用矩阵乘法（GEMM）。将线性代数与其他操作融合，可以降低延迟并提升应用程序的整体性能。
 
@@ -16,6 +17,8 @@ cuBLASDx 库目前提供以下特性：
 * 灵活的累加与融合方式，可在共享内存（shared memory）或寄存器（registers）中进行计算。
 * 支持将 BLAS 计算与其他操作融合，从而减少访问全局内存的次数。
 * 与未来版本的 CUDA Toolkit 兼容。
+
+# 可以把cuBLASDx理解为基于cute的和平台无关的device端GEMM抽象层
 
 # 例子
 
