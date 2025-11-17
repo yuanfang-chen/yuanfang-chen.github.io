@@ -30,11 +30,11 @@ twitter_username: kula85
 github_username:  yuanfang-chen
 
 # https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/setting-a-markdown-processor-for-your-github-pages-site-using-jekyll
-markdown: GFM
-# markdown: kramdown
-# kramdown:
-#   toc_levels: 1..3   # H1 to H3 only
-#   syntax_highlighter: coderay
+# markdown: GFM
+markdown: kramdown
+kramdown:
+  toc_levels: 1..3   # H1 to H3 only
+  syntax_highlighter: coderay
 
 
 # Build settings
