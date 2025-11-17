@@ -5,11 +5,6 @@ date:   2021-11-28 11:18:26 -0800
 categories: CUDA
 ---
 
-<!-- <nav class="toc-fixed" markdown="1"> -->
-<!-- * TOC
-{:toc} -->
-<!-- </nav> -->
-
 # include/cute/numeric/arithmetic_tuple.hpp
 a lightweight numeric tuple type defined as `template<class... T> struct ArithmeticTuple : public tuple<T...> { ... };`. It wraps a cute::tuple and provides element-wise numeric semantics (constructors, arithmetic operators, printing, and iterator support).
 
@@ -374,7 +369,6 @@ tile_unzip(Layout<LShape,LStride> const& layout,
 * `logical_divide(layoutA, layoutB)`
 * `logical_divide(layoutA, tiler)`
 * `ceil_div`
-
 ```cpp
 // Generalization of ceil_div for Layout lhs
 //   is effectively the "rest mode" of logical_divide.

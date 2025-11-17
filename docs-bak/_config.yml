@@ -8,7 +8,7 @@
 # For technical reasons, this file is *NOT* reloaded automatically when you use
 # 'bundle exec jekyll serve'. If you change this file, please restart the server process.
 #
-# If you need help with YAML syntax, here are some quick references for you:
+# If you need help with YAML syntax, here are some quick references for you: 
 # https://learn-the-web.algonquindesign.ca/topics/markdown-yaml-cheat-sheet/#yaml
 # https://learnxinyminutes.com/docs/yaml/
 #
@@ -19,23 +19,19 @@
 # in the templates via {{ site.myvariable }}.
 
 title: ychen's blog
-email: your-email@example.com
+email: abc@example.com
 description: >- # this means to ignore newlines until "baseurl:"
-  Write an awesome description for your new site here. You can edit this
-  line in _config.yml. It will appear in your document head meta (for
-  Google search results) and in your feed.xml site description.
+  some random stuff for my bookkeeping.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: kula85
+# twitter_username: kula85
 github_username:  yuanfang-chen
 
 # https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/setting-a-markdown-processor-for-your-github-pages-site-using-jekyll
 markdown: GFM
-# markdown: kramdown
-# kramdown:
-#   toc_levels: 1..3   # H1 to H3 only
-#   syntax_highlighter: coderay
 
+# https://jekyllrb.com/docs/permalinks/
+permalink: /:year/:month/:day/:title/
 
 # Build settings
 theme: minima

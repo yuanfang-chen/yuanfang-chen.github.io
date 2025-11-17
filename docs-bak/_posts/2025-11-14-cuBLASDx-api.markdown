@@ -1,16 +1,12 @@
 ---
 layout: post
-title:  "cuBLASDx总结"
-# date:   2021-11-28 11:18:26 -0800
+title:  "cuBLASDx API 简介"
+date:   2021-11-28 11:18:26 -0800
 categories: CUDA
 ---
-<!-- <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script> -->
 
 
-* TOC
-{:toc}
-
-# cuBLASDx简介
+# 什么是cuBLASDx
 cuBLAS 设备扩展（cuBLASDx）库使您能够在自己的 CUDA kernel 内部执行 cuBLAS 中提供的部分线性代数函数。目前该功能仅限于通用矩阵乘法（GEMM）。将线性代数与其他操作融合，可以降低延迟并提升应用程序的整体性能。
 
 cuBLASDx 库目前提供以下特性：
@@ -22,27 +18,7 @@ cuBLASDx 库目前提供以下特性：
 * 支持将 BLAS 计算与其他操作融合，从而减少访问全局内存的次数。
 * 与未来版本的 CUDA Toolkit 兼容。
 
-cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引入的一个轻量级、高性能库扩展，它允许开发者直接在 CUDA kernel 内部调用高度优化的 BLAS 函数，而无需像传统 cuBLAS 那样通过主机端 API 启动单独的 kernel。
-
->  简单说：cuBLASDx = 可嵌入 CUDA kernel 的 cuBLAS GEMM。
-
-<!-- 可以把cuBLASDx理解为基于cute的和平台无关的device端GEMM抽象层** -->
-
-一些核心概念
-1. cuBLASDx目前只支持GEMM
-1. 有3种GEMM可以调用
-    1.  \$$\mathbf{C}_{m\times n} = {\alpha} \times \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n} + {\beta} \times \mathbf{C}_{m\times n}$$
-    1. \$$\mathbf{C}_{m\times n} = \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n} + \mathbf{C}_{m\times n}$$
-    1. \$$\mathbf{C}_{m\times n} = \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n}$$ 
-1. cuBLASDx GEMM的operands必须在SMEM或者RMEM
-
-
-
-cuBLASDx和核心抽象是自动把开发者对GEMM的描述转换成
-
-## 使用cuBLASDx GEMM的步骤
-1. 
-1. 
+# 可以把cuBLASDx理解为基于cute的和平台无关的device端GEMM抽象层
 
 # 例子
 
