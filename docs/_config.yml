@@ -33,9 +33,9 @@ github_username:  yuanfang-chen
 # markdown: GFM
 markdown: kramdown
 kramdown:
+  input: GFM
   toc_levels: 1..3   # H1 to H3 only
-  syntax_highlighter: coderay
-
+#   syntax_highlighter: coderay
 
 # Build settings
 theme: minima
