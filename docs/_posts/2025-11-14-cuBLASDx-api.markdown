@@ -9,7 +9,16 @@ categories: CUDA
 * TOC
 {:toc}
 
-# cuBLASDx简介
+<style>
+  table {
+    border-collapse: collapse; /* Ensures borders are collapsed for a cleaner look */
+  }
+  /* table, th, td {
+    border: 2px solid yellow; /* Adjust '2px' for desired thickness and 'black' for color */
+  } */
+</style>
+
+## cuBLASDx简介
 cuBLAS 设备扩展（cuBLASDx）库使您能够在自己的 CUDA kernel 内部执行 cuBLAS 中提供的部分线性代数函数。目前该功能仅限于通用矩阵乘法（GEMM）。将线性代数与其他操作融合，可以降低延迟并提升应用程序的整体性能。
 
 cuBLASDx 库目前提供以下特性：
@@ -26,21 +35,166 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
 >  简单说：cuBLASDx = 可嵌入 CUDA kernel 的 cuBLAS GEMM。
 
 <!-- 可以把cuBLASDx理解为基于cute的和平台无关的device端GEMM抽象层** -->
+<!-- 1. 一些cuBLASDx API有`get_xxx()`和`suggest_xxx()`两个版本，比如`get_layout_smem_a`/`get_layout_smem_b`/`get_layout_smem_c`和`suggest_layout_smem_a`/`suggest_layout_smem_b`/`suggest_layout_smem_c` -->
+<!-- cuBLASDx和核心抽象是自动把开发者对GEMM的描述转换成 -->
 
-一些核心概念
-1. cuBLASDx目前只支持GEMM
+## 核心概念
+1. cuBLASDx目前只支持BLAS的GEMM函数
 1. 有3种GEMM可以调用
-    1. \$$\mathbf{C}_{m\times n} = {\alpha} \times \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n} + {\beta} \times \mathbf{C}_{m\times n}$$
-    1. \$$\mathbf{C}_{m\times n} = \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n} + \mathbf{C}_{m\times n}$$
-    1. \$$\mathbf{C}_{m\times n} = \mathbf{A}_{m\times k} \times \mathbf{B}_{k\times n}$$ 
-1. cuBLASDx GEMM的operands必须在SMEM或者RMEM
+    - Shared memory API: \\(\mathbf{C}\_{m\times n} = {\alpha} \times \mathbf{A}\_{m\times k} \times \mathbf{B}\_{k\times n} + {\beta} \times \mathbf{C}\_{m\times n}\\)
+    - Register API with accumulator: \\(\mathbf{C}\_{m\times n} = \mathbf{A}\_{m\times k} \times \mathbf{B}\_{k\times n} + \mathbf{C}\_{m\times n}\\)
+    - Register API without accumulator: \\(\mathbf{C}\_{m\times n} = \mathbf{A}\_{m\times k} \times \mathbf{B}\_{k\times n}\\)
+    <a id="reg-acc"></a>
+    - **说明：**对Shared memory API，\\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)必须在SMEM中；对Register API，\\(\mathbf{A}/\mathbf{B}\\)必须在SMEM中，\\(\mathbf{C}\\)必须在RMEM中
+1. GEMM的输入输出精度（\\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的精度）和GEMM中的计算精度（\\(\times\\)和\\(+\\)）解耦；在做GEMM计算之前，\\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)要做类型转换，转换到定义的GEMM计算精度（可以通过[`GEMM::execute()`](https://docs.nvidia.com/cuda/cublasdx/api/methods.html#shared-memory-api)的入参指定转换函数，不指定的话，类型转换必须可以通过implicit conversion进行，否则会有编译时报错）
+1. \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)可以以cute Layout格式或者以指针的方式传给GEMM API；cute Layout已经包含了内存布局信息，使用指针时，内存布局信息来自对GEMM的描述。TODO: 增加一个用例表示如果Layout信息和GEMM描述信息有冲突，会发生什么
+1. 开发者提供: • **对GEMM的逻辑描述(Description Operators)** • **对GEMM的执行描述(Execution Operators)**。每个细节的描述称为一个operator。Description Operators和Execution Operators加在一起称为function descriptor，也称为BLAS。代码示例：
+
+    ```cpp
+    #include <cublasdx.hpp>
+
+    using BLAS = decltype(cublasdx::Size<8, 16, 32>()
+        + cublasdx::Precision<double>()
+        + cublasdx::Type<cublasdx::type::complex>()
+        + cublasdx::Arrangement<cublasdx::col_major, cublasdx::col_major>()
+        + cublasdx::Function<cublasdx::function::MM>()
+        + cublasdx::SM<700>());
+    ```
+
+1. **对GEMM的逻辑描述(Description Operators)**包括：
+
+   | Operator | 默认值 | 描述 |
+   |----------|---------------|-------------|
+   | `Size <M, N, K>` | 无 | GEMM的大小。 |
+   | `Arrangement<ArrA, ArrB, ArrC>` | `row_major`, `col_major`, `col_major` | \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的majorness。 |
+   | `Precision<PA, PB, PC>` | `float`, `float`, `float` | \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的**计算精度**；必须全是浮点数或者全是整数。 |
+   | `Type<type>` | `type::real` | \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的类型，实数或是复数(`type::real` or `type::complex`). |
+   | `LeadingDimension<LDA, LDB, LDC>` | 由`Size`和`Arrangement`定义 | \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的Leading Dimensions。 |
+   | `Alignment <AlignA, AlignB, AlignC>` | `alignof(BLAS::a_value_type)`, … | \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)的Alignments(以bytes为单位)。 |
+   | `SM<CC>` | 无 | 目标CUDA架构的SM。|
+1. **对GEMM的执行描述(Execution Operators)**包括：
+
+   | Operator | 默认值 | 描述 |
+   |----------|---------------|-------------|
+   | `Block` | 无 | 创建在CUDA block中执行的BLAS函数。 |
+   | `BlockDim<X, Y, Z>` | `BLAS::suggested_block_dim()`的返回值 | 配置执行BLAS函数的线程数。`X*Y*Z`必须大于等于32，最好是32的整数倍。|
+1. cuBLASDx根据function descriptor计算
+    - GEMM需要的SMEM总大小（`get_shared_storage_size()`, `get_shared_storage_size_ab()`），以及\\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)各自占用的SMEM大小（`slice_shared_memory()`, `slice_shared_memory_ab()`）
+    - \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)在GMEM和SMEM中的cute Layout（`BLAS::get_layout_<gmem/smem>_<a/b/c>()`根据矩阵Layout信息计算，不带优化； `BLAS::suggest_layout_<gmem/smem>_<a/b/c>()`根据矩阵Layout信息和具体的SM计算，带MMA优化和copy优化）
+    - 选择合适的MMA指令
+    - MMA指令的tiling（矩阵计算的Shape）
+    - 以及参与GEMM计算的thread的register fragment
+1. 创建function descriptor后，可以通过[`Traits`](https://docs.nvidia.com/cuda/cublasdx/api/traits.html)返回其中包含的GEMM相关信息，比如：
+    - 如果function descriptor包含Description Operators，则`cublasdx::is_blas<BLAS>::value`为真
+    - 如果function descriptor里有且只有一个`Size + Function + SM`operator，则`cublasdx::is_complete_blas<BLAS>::value`为真
+    - 如果function descriptor包含Description Operators和Execution Operators，则`cublasdx::is_blas_execution<BLAS>::value`为真    TODO：写个例子，只有Block
+    - 如果`cublasdx::is_complete_blas<BLAS>::value`和`cublasdx::is_blas_execution<BLAS>::value`同时为真，则`cublasdx::is_complete_blas_execution<BLAS>::value`为真
+1. RMEM是每个thread独占的且十分有限，GEMM的输入输出必须分布于参与GEMM的一组thread中所有RMEM中。把tensor数据分布于一组thread的RMEM的方式称为**partitioning**。cuBLASDx中[partitioner](https://docs.nvidia.com/cuda/cublasdx/api/other_tensors.html#partitioner-and-register-fragment-tensors)包含了和partitioning有关的所有信息。获取partitioner有三种方式：
+
+    ```cpp
+    // #1a 默认的partitioner
+    auto partitioner = BLAS::get_partitioner();
+
+    // #1b 带优化的partitioner
+    auto partitioner = BLAS::suggest_partitioner();
+
+    // "Register API without accumulator"方式的GEMM返回值包括partitioner
+    auto [c_register_fragment, partitioner]
+                    = BLAS().execute(a_shared_tensor, b_shared_tensor);
+    ```
+    partitioner的选择要和使用的Layout的对应，否则对性能有影响：
+    - `BLAS::get_partitioner()`配合`get_layout_smem_*()`使用
+    - `BLAS::suggest_partitioner()`配合`suggest_layout_smem_*()`使用
+
+1. partitioner有如下API：
+
+    ```cpp
+    // Partitioning properties
+    __device__ bool is_predicated();
+    __device__ bool is_thread_active();
+
+    // Accumulator creation, creates a register cublasdx::tensor
+    __device__ constexpr auto make_accumulator_fragment();
+
+    // This method will return a non-owning view of its argument’s subtensor assigned to the calling thread, corresponding to its local register fragment.
+    template<class CTensor>
+    __forceinline__ __device__
+    auto partition_like_C(CTensor && ctensor) const;
+
+    // These 2 functions extend functionality of is_predicated() allowing to map local register fragment index to its source (global or shared) tensor index, as well as check if this index is in bounds.
+    template<class ... Coords>
+    __forceinline__ __device__
+    auto map_fragment_index(Coords&& ... coords) const;
+    template<class ... Coords>
+    __forceinline__ __device__
+    bool is_index_in_bounds(Coords&& ... coords) const;
+    ```
+    说明：
+    - xx
+    - xx
+
+1. cuBLASDx支持两种tensor拷贝操作：• GMEM和SMEM的双向拷贝 • SMEM和RMEM的双向拷贝。
+1. GMEM和SMEM的双向拷贝：该拷贝操作是协同完成的。所有线程（由 NumThreads 或 BLAS::block_dim 指定）都将参与此次拷贝。该函数会考虑给定的内存对齐方式，并在可能的情况下尝试vectorized load/store。
+    ```cpp
+    template<uint32_t NumThreads,       // Number of threads performing copy operation
+            uint32_t AlignmentInBytes, // Pointer alignment of src and dst tensor (minimum of them if they are different)
+            class SrcEngine,
+            class SrcLayout,
+            class DstEngine,
+            class DstLayout>
+    __forceinline__ __device__
+    void copy(const unsigned int                            tid, // Thread index in CUDA block
+            const cublasdx::tensor<SrcEngine, SrcLayout>& src,
+            cublasdx::tensor<DstEngine, DstLayout>&       dst)
+
+    // Assumes pointers in both dst and src tensors are not extra aligned
+    template<uint32_t NumThreads, // Number of threads performing copy operation
+            class SrcEngine,
+            class SrcLayout,
+            class DstEngine,
+            class DstLayout>
+    __forceinline__ __device__
+    void copy(const unsigned int                            tid, // Thread index in CUDA block
+            const cublasdx::tensor<SrcEngine, SrcLayout>& src,
+            cublasdx::tensor<DstEngine, DstLayout>&       dst)
+
+    template<class BLAS,                // BLAS description which provides the number of threads
+            uint32_t AlignmentInBytes, // Pointer alignment of src and dst tensor (minimum of them if they are different)
+            class SrcEngine,
+            class SrcLayout,
+            class DstEngine,
+            class DstLayout>
+    __forceinline__ __device__
+    void copy(const cublasdx::tensor<SrcEngine, SrcLayout>& src,
+            cublasdx::tensor<DstEngine, DstLayout>&       dst)
+    ```
+1. SMEM和RMEM的双向拷贝
+
+    ```cpp
+    // #1 Store fragment: partition and copy from register fragment to global / shared memory tensor
+    template<unsigned AlignmentInBytes,    // Alignment of source tensor pointer
+            class TRC, class CFragLayout, // Register Memory Fragment Tensor
+            class TC, class CLayout,      // Global or Shared Memory tensor
+            class Partitioner>
+    __forceinline__ __device__
+    copy_fragment(tensor<TRC, CFragLayout> const& tS, // Entire non-partitioned global / shared tensor
+                tensor<TC, CLayout>           & tD, // Calling thread's register fragment tensor
+                Partitioner              const& p);
+
+    // #2 Load fragment: partition and copy from global / shared memory tensor to register fragment
+    template<unsigned AlignmentInBytes,    // Alignment of source tensor pointer
+            class TRC, class CFragLayout, // Register Memory Fragment Tensor
+            class TC, class CLayout,      // Global or Shared Memory tensor
+            class Partitioner>
+    __forceinline__ __device__
+    copy_fragment(tensor<TC, CLayout>      const& tS,
+                tensor<TRC, CFragLayout>      & tD,
+                Partitioner              const& p);
+    ```
 
 
-
-cuBLASDx和核心抽象是自动把开发者对GEMM的描述转换成
-
-## 使用cuBLASDx GEMM的步骤
-1. 
+## GEMM的调用步骤
+1. 用`Operator`定义
 1. 
 
 # 例子
@@ -210,3 +364,7 @@ int main(int, char**) {
 }
 
 ```
+
+## References
+- https://docs.nvidia.com/cuda/cublasdx/index.html
+- https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization
