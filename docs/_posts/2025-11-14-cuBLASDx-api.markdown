@@ -13,10 +13,11 @@ categories: CUDA
   table {
     border-collapse: collapse; /* Ensures borders are collapsed for a cleaner look */
   }
-  /* table, th, td {
-    border: 2px solid yellow; /* Adjust '2px' for desired thickness and 'black' for color */
-  } */
 </style>
+
+  <!-- table, th, td {
+    border: 2px solid yellow; /* Adjust '2px' for desired thickness and 'black' for color */
+  } -->
 
 ## cuBLASDx简介
 cuBLAS 设备扩展（cuBLASDx）库使您能够在自己的 CUDA kernel 内部执行 cuBLAS 中提供的部分线性代数函数。目前该功能仅限于通用矩阵乘法（GEMM）。将线性代数与其他操作融合，可以降低延迟并提升应用程序的整体性能。
@@ -80,10 +81,11 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
    | `BlockDim<X, Y, Z>` | `BLAS::suggested_block_dim()`的返回值 | 配置执行BLAS函数的线程数。`X*Y*Z`必须大于等于32，最好是32的整数倍。|
 1. cuBLASDx根据function descriptor计算
     - GEMM需要的SMEM总大小（`get_shared_storage_size()`, `get_shared_storage_size_ab()`），以及\\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)各自占用的SMEM大小（`slice_shared_memory()`, `slice_shared_memory_ab()`）
-    - \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)在GMEM和SMEM中的cute Layout（`BLAS::get_layout_<gmem/smem>_<a/b/c>()`根据矩阵Layout信息计算，不带优化； `BLAS::suggest_layout_<gmem/smem>_<a/b/c>()`根据矩阵Layout信息和具体的SM计算，带MMA优化和copy优化）
+    - \\(\mathbf{A}/\mathbf{B}/\mathbf{C}\\)在GMEM和SMEM中的Layout（`BLAS::get_layout_<gmem/smem>_<a/b/c>()`算出的Layout不带优化； `BLAS::suggest_layout_<gmem/smem>_<a/b/c>()`算出的Layout会根据具体的SM做MMA优化和copy优化）
     - 选择合适的MMA指令
     - MMA指令的tiling（矩阵计算的Shape）
     - 以及参与GEMM计算的thread的register fragment
+    - [Launch kernel需要的Block Dim](https://docs.nvidia.com/cuda/cublasdx/api/traits.html#block-dim-trait)
 1. 创建function descriptor后，可以通过[`Traits`](https://docs.nvidia.com/cuda/cublasdx/api/traits.html)返回其中包含的GEMM相关信息，比如：
     - 如果function descriptor包含Description Operators，则`cublasdx::is_blas<BLAS>::value`为真
     - 如果function descriptor里有且只有一个`Size + Function + SM`operator，则`cublasdx::is_complete_blas<BLAS>::value`为真
@@ -125,16 +127,17 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
     template<class ... Coords>
     __forceinline__ __device__
     auto map_fragment_index(Coords&& ... coords) const;
+    // check if the fragment index is in bounds
     template<class ... Coords>
     __forceinline__ __device__
     bool is_index_in_bounds(Coords&& ... coords) const;
     ```
     说明：
-    - 
-    - xx
+    - `is_predicated()`：元素在各线程之间的划分是通过对`Size(M,N,K)`operator所定义的问题规模进行分块（tiling），并将其映射到多个 MMA（Matrix Multiply-Accumulate）指令上实现的。每条 MMA 指令负责计算一个特定形状的子块。当问题的整体形状不能被底层 MMA 指令的原始计算形状整除时（`is_predicated()`返回true；能整除则返回false），那些“多余”的元素不会从内存中读取，而是用 0 填充；在存储结果时，这些填充的元素也会被跳过。
+    - `is_thread_active()`：由于 cuBLASDx 支持在 CUDA threadblock大小与 `BlockDim`operator不匹配的 kernel 中执行，并非所有线程都会参与 GEMM 运算。这意味着某些线程可能未被分配任何计算元素。可以通过调用 `is_thread_active()` 成员函数来精确判断当前调用线程是否属于这种情况（即是否未被分配任务）。
 
-1. cuBLASDx支持两种tensor拷贝操作：• GMEM和SMEM的双向拷贝 • SMEM和RMEM的双向拷贝。
-1. GMEM和SMEM的双向拷贝：该拷贝操作是协同完成的。所有线程（由 NumThreads 或 BLAS::block_dim 指定）都将参与此次拷贝。该函数会考虑给定的内存对齐方式，并在可能的情况下尝试vectorized load/store。
+1. cuBLASDx支持两种tensor拷贝操作：• GMEM和SMEM的双向拷贝 • SMEM/GMEM和RMEM的双向拷贝。
+1. GMEM和SMEM的双向拷贝：该拷贝操作是协同完成的(cooperative operation)。所有线程（由 NumThreads 或 BLAS::block_dim 指定）都将参与此次拷贝。该函数会考虑给定的内存对齐方式，并在可能的情况下尝试vectorized load/store。
     ```cpp
     template<uint32_t NumThreads,       // Number of threads performing copy operation
             uint32_t AlignmentInBytes, // Pointer alignment of src and dst tensor (minimum of them if they are different)
@@ -168,7 +171,7 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
     void copy(const cublasdx::tensor<SrcEngine, SrcLayout>& src,
             cublasdx::tensor<DstEngine, DstLayout>&       dst)
     ```
-1. SMEM和RMEM的双向拷贝
+1. SMEM/GMEM和RMEM的双向拷贝（SMEM<->RMEM，GMEM<->RMEM）
 
     ```cpp
     // #1 Store fragment: partition and copy from register fragment to global / shared memory tensor
@@ -194,10 +197,238 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
 
 
 ## GEMM的调用步骤
-1. 用`Operator`定义
-1. 
+1. 定义GEMM的function descriptor，比如：
 
-# 例子
+    ```cpp
+    #include <cublasdx.hpp>
+    using namespace cublasdx;
+
+    using GEMM = decltype(Size<32, 32, 32>()
+                        + Precision<double>()
+                        + Type<type::real>()
+                        + Function<function::MM>()
+                        + Arrangement<cublasdx::row_major,
+                                      cublasdx::col_major>()
+                        + SM<700>()
+                        + Block()
+                        + BlockDim<256>());
+    ```
+1. 准备GEMM的输入输出A/B/C。往往A/B/C需要从GMEM加载到SMEM或者RMEM，A/B/C在GMEM/SMEM/RMEM的布局都以Tensor的格式存在。Tensor包含的布局信息由cuBLASDx自动计算
+    
+    **GMEM/SMEM：使用`cublasdx::make_tensor`创建Tensor**
+
+    ```cpp
+    template<class GEMM>
+    __global__ void gemm_kernel(GEMM::c_value_type alpha, GEMM::a_value_type *a, GEMM::b_value_type *b, GEMM::c_value_type beta, GEMM::c_value_type *c) {
+        extern __shared__ __align__(16) char smem[];
+
+        // Make global memory tensor
+        auto a_global_tensor = cublasdx::make_tensor(a, GEMM::get_layout_gmem_a());
+        auto b_global_tensor = cublasdx::make_tensor(b, GEMM::get_layout_gmem_b());
+        auto c_global_tensor = cublasdx::make_tensor(c, GEMM::get_layout_gmem_c());
+
+        // Make shared memory tensor
+        auto [smem_a, smem_b, smem_c] = slice_shared_memory<GEMM>(smem); // smem_<a/b/c> are aligned to cublasdx::alignment_of<GEMM>::<a/b/c>
+        auto a_shared_tensor = cublasdx::make_tensor(smem_a, GEMM::get_layout_smem_a());
+        auto b_shared_tensor = cublasdx::make_tensor(smem_b, GEMM::get_layout_smem_b());
+        auto c_shared_tensor = cublasdx::make_tensor(smem_c, GEMM::get_layout_smem_c());
+    }
+    ```
+    **RMEM：使用`partitioner`创建Fragment（也称为1D Tensor）**
+
+    ```cpp
+    auto partitioner = BLAS::get_partitioner();
+    auto c_fragment_accumulator = partitioner.make_accumulator_fragment();
+
+    // Now you can access it as a regular 1D tensor:
+    auto val_0 = c_fragment_accumulator(0);
+    ```
+
+1. 把A/B/C Tensor从GMEM拷贝到SMEM（cooperative operation）
+
+    ```cpp
+    // Load data from global memory tensor to shared memory tensor
+    using alignment = cublasdx::alignment_of<GEMM>;
+    cublasdx::copy<GEMM, alignment::a>(a_global_tensor, a_shared_tensor); // <a/b/c>_shared_tensor, created from smem_<a/b/c>, is aligned to alignment::<a/b/c>
+    cublasdx::copy<GEMM, alignment::b>(b_global_tensor, b_shared_tensor);
+    cublasdx::copy<GEMM, alignment::c>(c_global_tensor, c_shared_tensor);
+    cublasdx::copy_wait();
+    ```
+    说明：SMEM到GMEM的拷贝类似
+1. 把A/B/C Tensor从GMEM（矩阵C）或者SMEM（矩阵A/B）拷贝到RMEM（per-thread operation）
+
+    ```cpp
+    // Load data from global memory tensor to shared memory tensor
+    using alignment = cublasdx::alignment_of<GEMM>;
+    auto partitioner = GEMM::get_partitioner();
+    auto c_fragment_accumulator = partitioner.make_accumulator_fragment();
+
+    // Load data from global to registers
+    cublasdx::copy_fragment<alignment::a>(c_global_tensor, c_fragment_accumulator, partitioner);
+    // Load data from shared to registers
+    cublasdx::copy_fragment<alignment::a>(c_shared_tensor, c_fragment_accumulator, partitioner);
+    ```
+    说明：RMEM到GMEM/SMEM的拷贝类似
+1. 调用GEMM
+
+    **Shared memory API**
+    ```cpp
+    #include <cublasdx.hpp>
+    using namespace cublasdx;
+
+    template<class GEMM>
+    __global__ void gemm_kernel_shared(const typename GEMM::c_value_type  alpha,
+                                    const typename GEMM::a_value_type* a,
+                                    const typename GEMM::b_value_type* b,
+                                    const typename GEMM::c_value_type  beta,
+                                    typename GEMM::c_value_type* c) {
+        extern __shared__ __align__(16) char smem[];
+
+        // Make global memory tensor
+        auto a_global_tensor = cublasdx::make_tensor(a, GEMM::get_layout_gmem_a());
+        auto b_global_tensor = cublasdx::make_tensor(b, GEMM::get_layout_gmem_b());
+        auto c_global_tensor = cublasdx::make_tensor(c, GEMM::get_layout_gmem_c());
+
+        // Make shared memory tensor
+        auto [smem_a, smem_b, smem_c] = cublasdx::slice_shared_memory<GEMM>(smem);
+        auto a_shared_tensor = cublasdx::make_tensor(smem_a, GEMM::get_layout_smem_a());
+        auto b_shared_tensor = cublasdx::make_tensor(smem_b, GEMM::get_layout_smem_b());
+        auto c_shared_tensor = cublasdx::make_tensor(smem_c, GEMM::get_layout_smem_c());
+
+        // Load data from global memory tensor to shared memory tensor
+        using alignment = cublasdx::alignment_of<GEMM>;
+        cublasdx::copy<GEMM, alignment::a>(a_global_tensor, a_shared_tensor);
+        cublasdx::copy<GEMM, alignment::b>(b_global_tensor, b_shared_tensor);
+        cublasdx::copy<GEMM, alignment::c>(c_global_tensor, c_shared_tensor);
+        cublasdx::copy_wait();
+
+        // Execute GEMM
+        GEMM().execute(alpha, a_shared_tensor, b_shared_tensor, beta, c_shared_tensor);
+        __syncthreads();
+
+        // Store data from shared memory tensor to global memory tensor
+        cublasdx::copy<GEMM, alignment::c>(c_shared_tensor, c_global_tensor);
+    }
+    ```
+
+    **Register API with accumulator**
+    ```cpp
+    #include <cublasdx.hpp>
+    using namespace cublasdx;
+
+    template<class GEMM>
+    __global__ void gemm_kernel_registers_accumulation(const typename GEMM::a_value_type* a,
+                                                    const typename GEMM::b_value_type* b,
+                                                    typename GEMM::c_value_type* c) {
+        extern __shared__ __align__(16) char smem[];
+
+        // Make global memory tensor
+        auto a_global_tensor = cublasdx::make_tensor(a, GEMM::get_layout_gmem_a());
+        auto b_global_tensor = cublasdx::make_tensor(b, GEMM::get_layout_gmem_b());
+        auto c_global_tensor = cublasdx::make_tensor(c, GEMM::get_layout_gmem_c());
+
+        // Make shared memory tensor
+        auto [smem_a, smem_b] = cublasdx::slice_shared_memory_ab<GEMM>(smem);
+        auto a_shared_tensor = cublasdx::make_tensor(smem_a, GEMM::get_layout_smem_a());
+        auto b_shared_tensor = cublasdx::make_tensor(smem_b, GEMM::get_layout_smem_b());
+
+        // Load data from global memory tensor to shared memory tensor
+        using alignment = cublasdx::alignment_of<GEMM>;
+        cublasdx::copy<GEMM, alignment::a>(a_global_tensor, a_shared_tensor);
+        cublasdx::copy<GEMM, alignment::b>(b_global_tensor, b_shared_tensor);
+        cublasdx::copy_wait();
+
+        // Get default data partitioner
+        auto partitioner = GEMM::get_partitioner();
+        // Create register fragment Accumulator
+        auto c_register_fragment = partitioner.make_accumulator_fragment();
+        // Partition Global C for GEMM and load appropriate elements into register fragment
+        cublasdx::copy_fragment<alignment::c>(c_global_tensor, c_register_fragment, partitioner);
+
+        // Execute GEMM with accumulation
+        GEMM().execute(a_shared_tensor, b_shared_tensor, c_register_fragment);
+
+        // Partition Global C for GEMM and store appropriate elements to global memory
+        cublasdx::copy_fragment<alignment::c>(c_register_fragment, c_global_tensor, partitioner);
+    }
+    ```
+
+    **Register API without accumulator**
+    ```cpp
+    #include <cublasdx.hpp>
+    using namespace cublasdx;
+
+    template<class GEMM>
+    __global__ void gemm_kernel_registers(const typename GEMM::a_value_type* a,
+                                        const typename GEMM::b_value_type* b,
+                                        typename GEMM::c_value_type* c) {
+        extern __shared__ __align__(16) char smem[];
+
+        // Make global memory tensor
+        auto a_global_tensor = cublasdx::make_tensor(a, GEMM::get_layout_gmem_a());
+        auto b_global_tensor = cublasdx::make_tensor(b, GEMM::get_layout_gmem_b());
+        auto c_global_tensor = cublasdx::make_tensor(c, GEMM::get_layout_gmem_c());
+
+        // Make shared memory tensor
+        auto [smem_a, smem_b] = cublasdx::slice_shared_memory_ab<GEMM>(smem);
+        auto a_shared_tensor = cublasdx::make_tensor(smem_a, GEMM::get_layout_smem_a());
+        auto b_shared_tensor = cublasdx::make_tensor(smem_b, GEMM::get_layout_smem_b());
+
+        // Load data from global memory tensor to shared memory tensor
+        using alignment = cublasdx::alignment_of<GEMM>;
+        cublasdx::copy<GEMM, alignment::a>(a_global_tensor, a_shared_tensor);
+        cublasdx::copy<GEMM, alignment::b>(b_global_tensor, b_shared_tensor);
+        cublasdx::copy_wait();
+
+        // Execute GEMM and get register fragment results and data partitioner in return
+        auto [c_register_fragment, partitioner] = GEMM().execute(a_shared_tensor, b_shared_tensor);
+
+        // Partition Global C for GEMM and store appropriate elements to global memory
+        cublasdx::copy_fragment<alignment::c>(c_register_fragment, c_global_tensor, partitioner);
+    }
+    ```
+1. Launch GEMM kernel。kernel launch需要知道threadblock dimension和SMEM大小，这两个信息由cuBLASDx计算（`BLAS::block_dim`，`cublasdx::get_shared_storage_size`， `cublasdx::get_shared_storage_size_ab`）。
+
+    ```cpp
+    #include <cublasdx.hpp>
+    using namespace cublasdx;
+
+    // Kernels are unfolded in their appropriate sections above
+    template<class GEMM>
+    __global__ void gemm_kernel_shared(...);
+
+    template<class GEMM>
+    __global__ void gemm_kernel_registers_accumulation(...);
+
+    template<class GEMM>
+    __global__ void gemm_kernel_registers(...);
+
+
+    // CUDA_CHECK_AND_EXIT - marco checks if function returns cudaSuccess; if not it prints the error code and exits the program
+    void introduction_example(value_type alpha, value_type *a, value_type *b, value_type beta, value_type *c) {
+    using GEMM = decltype(Size<32, 32, 32>()
+                        + Precision<double>()
+                        + Type<type::real>()
+                        + Arrangement<cublasdx::row_major, cublasdx::col_major>()
+                        + Function<function::MM>());
+                        + SM<700>()
+                        + Block());
+
+    // Shared memory API: C = alpha * A * B + beta * C
+    // Invokes kernel with GEMM::block_dim threads in CUDA block
+    gemm_kernel_shared<GEMM><<<1, GEMM::block_dim, cublasdx::get_shared_storage_size<GEMM>()>>>(1.0, a, b, 1.0, c);
+
+    // Register fragment Accumulation API: C = A * B + C
+    // Invokes kernel with GEMM::block_dim threads in CUDA block
+    gemm_kernel_registers_accumulation<GEMM><<<1, GEMM::block_dim, cublasdx::get_shared_storage_size_ab<GEMM>()>>>(a, b, c);
+
+    // Register fragment API: C = A * B
+    // Invokes kernel with GEMM::block_dim threads in CUDA block
+    gemm_kernel_registers<GEMM><<<1, GEMM::block_dim, cublasdx::get_shared_storage_size_ab<GEMM>()>>>(a, b, c);
+    }
+    ```
+
+## 完整示例
 
 ```cpp
 template<class GEMM>
