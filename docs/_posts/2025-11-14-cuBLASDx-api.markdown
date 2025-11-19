@@ -130,7 +130,7 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
     bool is_index_in_bounds(Coords&& ... coords) const;
     ```
     说明：
-    - xx
+    - 
     - xx
 
 1. cuBLASDx支持两种tensor拷贝操作：• GMEM和SMEM的双向拷贝 • SMEM和RMEM的双向拷贝。

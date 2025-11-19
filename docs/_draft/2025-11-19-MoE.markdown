@@ -1,0 +1,16 @@
+---
+layout: post
+title:  "MoE"
+mathjax: true
+# date:   2025-11-19 11:18:26 -0800
+categories: CUDA
+---
+
+Grouped GEMM APIs
+Grouped GEMM APIs can be viewed as a generalization of the batched APIs that enable different matrix sizes, transpositions, and scaling factors to be grouped and parallelized in one kernel launch.
+
+One example where this approach provides speedup is the generation phase of a mixture-of-experts (MoE) model with batch sizes of 8 and 64 and FP16 inputs and outputs. In this example, the grouped GEMM API can achieve a 1.2x speedup over naive looping using the batched GEMM API. 
+
+
+## References
+https://developer.nvidia.com/blog/introducing-grouped-gemm-apis-in-cublas-and-more-performance-updates/
