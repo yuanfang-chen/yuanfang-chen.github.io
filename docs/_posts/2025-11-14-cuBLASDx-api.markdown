@@ -1,9 +1,9 @@
 ---
 layout: post
 title:  "cuBLASDx总结"
-mathjax: true
-# date:   2021-11-28 11:18:26 -0800
+date:   2025-11-14 11:18:26 -0800
 categories: CUDA
+mathjax: true
 ---
 
 * TOC
@@ -38,6 +38,9 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
 <!-- 可以把cuBLASDx理解为基于cute的和平台无关的device端GEMM抽象层** -->
 <!-- 1. 一些cuBLASDx API有`get_xxx()`和`suggest_xxx()`两个版本，比如`get_layout_smem_a`/`get_layout_smem_b`/`get_layout_smem_c`和`suggest_layout_smem_a`/`suggest_layout_smem_b`/`suggest_layout_smem_c` -->
 <!-- cuBLASDx和核心抽象是自动把开发者对GEMM的描述转换成 -->
+
+## 前置知识
+理解本文内容需要知道[cute Layout](https://docs.nvidia.com/cutlass/media/docs/cpp/cute/01_layout.html)。
 
 ## 核心概念
 1. cuBLASDx目前只支持BLAS的GEMM函数

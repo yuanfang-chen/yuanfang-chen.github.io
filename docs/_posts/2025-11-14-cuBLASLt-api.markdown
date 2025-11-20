@@ -1,14 +1,136 @@
 ---
 layout: post
 title:  "cuBLASLt API 简介"
-# date:   2021-11-28 11:18:26 -0800
+date:   2025-11-14 11:18:26 -0800
 categories: CUDA
 ---
 
-# 什么是cuBLASLt
+* TOC
+{:toc}
+
+<style>
+  table {
+    border-collapse: collapse; /* Ensures borders are collapsed for a cleaner look */
+  }
+</style>
+
+## 什么是cuBLASLt
 CUBLASLt（cuBLAS Light）是 NVIDIA cuBLAS 库的一个轻量级、灵活且高性能的扩展，专为深度学习中的混合精度矩阵乘法（GEMM）优化而设计。它支持 Tensor Core、自定义数据布局、融合操作（如 GELU、ReLU）、稀疏计算等高级特性。cuBLASLt支持自动调优。
 
-# 特性
+## 核心概念
+1. cuBLASLt是Host API，所有API都在Host侧调用。提供GEMM API（`cublasLtMatmul()`）和矩阵Element-wise转换能力（`cublasLtMatrixTransform()`）
+1. 相比于cuBLAS的GEMM，cuBLASLt的GEMM API中可以传入更加详细的两个信息: GEMM计算的逻辑描述（`cublasLtMatmulDesc_t`）,A/B/C的布局描述（`cublasLtMatrixLayout_t`）
+1. GEMM计算的逻辑描述（`cublasLtMatmulDesc_t`）包括：
+
+   | Value | Description |
+   |----------|---------------|
+   | `x` | 。 |
+   | `CUBLASLT_MATMUL_DESC_COMPUTE_TYPE` | 指定计算精度。注意这个和A/B/C的数据精度是解耦的。 |
+   | `CUBLASLT_MATMUL_DESC_SCALE_TYPE` | 指定`alpha`和`beta`的数据精度。默认值同`CUBLASLT_MATMUL_DESC_COMPUTE_TYPE` |
+   | `CUBLASLT_MATMUL_DESC_POINTER_MODE` | 指定`alpha`和`beta`是在Host侧内存中，Device侧内存中，还是一个Device侧向量。默认在Host侧。 |
+   | `CUBLASLT_MATMUL_DESC_TRANSA` | 。 |
+   | `CUBLASLT_MATMUL_DESC_A_SCALE_POINTER` | 以指针的形式指定一个scale用于将矩阵 A 中的数据转换到计算数据类型`CUBLASLT_MATMUL_DESC_COMPUTE_TYPE`的数值范围内。scale的数据类型必须与计算类型``CUBLASLT_MATMUL_DESC_COMPUTE_TYPE``相同。如果未指定或设为 NULL，则默认缩放因子为 1。 |
+   | `CUBLASLT_MATMUL_DESC_B_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
+   | `CUBLASLT_MATMUL_DESC_C_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
+   | `CUBLASLT_MATMUL_DESC_D_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
+    TODO:
+
+1. A/B/C的布局描述（`cublasLtMatrixLayout_t`）包括：
+
+   | Value | Description |
+   |----------|---------------|
+   | `x` | 。 |
+1. 开发者指定优化设置（`cublasLtMatmulPreference_t`），这些设置用于指导 cuBLASLt 在矩阵乘法（matmul）操作中进行算法选择（`cublasLtMatmulAlgo_t`）。算法的详细信息由`cublasLtMatmulAlgoConfigAttributes_t`表示，`cublasLtMatmulAlgoConfigSetAttribute`/`cublasLtMatmulAlgoConfigGetAttribute()`可以读写`cublasLtMatmulAlgoConfigAttributes_t`的每个属性。
+
+    选择最优算法需要三个步骤：
+
+    1. 创建一个 cublasLtMatmulPreference_t 对象；
+    1. 设置你的偏好（如最大 workspace 大小、是否允许非确定性等）；
+    1. 调用 cublasLtMatmulAlgoGetHeuristic()，传入该 preference，获取推荐的算法列表。
+
+1. 开发者也可以通过`cublasLtMatmulAlgoInit`创建`cublasLtMatmulAlgo_t`。`cublasLtMatmulAlgoInit`的`algoId`入参可以通过`cublasLtMatmulAlgoGetIds()`来获取。
+
+    ```cpp
+    cublasLtMatmulAlgo_t algo = {};
+    const int32_t algoId = 10;
+    const cublasLtMatmulTile_t tileId = CUBLASLT_MATMUL_TILE_16x16; // 5
+    const cublasLtReductionScheme_t reductionMode = CUBLASLT_REDUCTION_SCHEME_INPLACE; // 1
+    const int32_t splitKFactor = 256;
+
+    cublasLtMatmulAlgoInit(ltHandle,  //
+                           CUBLAS_COMPUTE_64F,   // compute
+                           CUDA_R_64F,   // scale
+                           CUDA_R_64F,   // A
+                           CUDA_R_64F,   // B
+                           CUDA_R_64F,   // C
+                           CUDA_R_64F,   // D
+                           algoId,
+                           &algo);
+
+    cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tileId, sizeof(tileId));
+    cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionMode, sizeof(reductionMode));
+    cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitKFactor, sizeof(splitKFactor));
+    ```
+
+## GEMM调用步骤
+1. 创建GEMM的逻辑描述（`cublasLtMatmulDesc_t`）
+
+    ```cpp
+    // create operation desciriptor; see cublasLtMatmulDescAttributes_t for details about defaults; here we just need to
+    // set the transforms for A and B
+    cublasLtMatmulDescCreate(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
+    cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa));
+    cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb));
+    ```
+1. 创建矩阵的布局描述（`cublasLtMatrixLayout_t`）
+
+    ```cpp
+    cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, m, k, lda);
+    cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, k, n, ldb);
+    cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, m, n, ldc);
+    ```
+1. 创建优化偏好（`cublasLtMatmulPreference_t`）
+
+    ```cpp
+    // create preference handle; here we could use extra attributes to disable tensor ops or to make sure algo selected
+    // will work with badly aligned A, B, C; here for simplicity we just assume A,B,C are always well aligned (e.g.
+    // directly come from cudaMalloc)
+    cublasLtMatmulPreferenceCreate(&preference);
+    cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize));
+    ```
+1. 调用`cublasLtMatmulAlgoGetHeuristic`算出适用的GEMM算法。通过`requestedAlgoCount`入参可以指定可用的算法数量。
+
+    ```cpp
+    // we just need the best available heuristic to try and run matmul. There is no guarantee this will work, e.g. if A
+    // is badly aligned, you can request more (e.g. 32) algos and try to run them one by one until something works
+    cublasLtMatmulAlgoGetHeuristic(ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 1, &heuristicResult, &returnedResults);
+    if (returnedResults == 0) {
+        checkCublasStatus(CUBLAS_STATUS_NOT_SUPPORTED);
+    }
+    ```
+
+1. 调用GEMM`cublasLtMatmul`
+
+    ```cpp
+    cublasLtMatmul(ltHandle,
+                   operationDesc,
+                   alpha,
+                   A,
+                   Adesc,
+                   B,
+                   Bdesc,
+                   beta,
+                   C,
+                   Cdesc,
+                   C,
+                   Cdesc,
+                   &heuristicResult.algo,
+                   workspace,
+                   workspaceSize,
+                   0);
+    ```
+
+## 特性
 ## Epilogue融合
 支持 BIAS, RELU, GELU, SCALE, RESIDUAL 等，减少 kernel launch 次数
 
@@ -142,145 +264,6 @@ int main() {
 
     return 0;
 }
-```
-
-## 算法选择
-`cublasLtMatmulPreference_t` 是 cuBLASLt（cuBLAS Light）库中的一个关键数据结构，用于在执行混合精度矩阵乘法（GEMM）时 配置算法选择的偏好策略。它决定了 cuBLASLt 在搜索可用算法（algorithms）时的行为，比如是否允许非确定性结果、最大工作空间大小、数学模式等。
-
-选择最优算法需要三个步骤：
-
-1. 创建一个 cublasLtMatmulPreference_t 对象；
-2. 设置你的偏好（如最大 workspace 大小、是否允许非确定性等）；
-3. 调用 cublasLtMatmulAlgoGetHeuristic()，传入该 preference，获取推荐的算法列表。
-
-cublasLtMatmulPreference_t的定义
-```cpp
-/** Algo search preference to fine tune the heuristic function. */
-typedef enum {
-  /** Search mode, see cublasLtMatmulSearch_t.
-   *
-   * uint32_t, default: CUBLASLT_SEARCH_BEST_FIT
-   */
-  CUBLASLT_MATMUL_PREF_SEARCH_MODE = 0,
-
-  /** Maximum allowed workspace size in bytes.
-   *
-   * uint64_t, default: 0 - no workspace allowed
-   */
-  CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES = 1,
-
-  /** Reduction scheme mask, see cublasLtReductionScheme_t. Filters heuristic result to only include algo configs that se one of the required modes.
-   *
-   * E.g. mask value of 0x03 will allow only INPLACE and COMPUTE_TYPE reduction schemes.
-   *
-   * uint32_t, default: CUBLASLT_REDUCTION_SCHEME_MASK (allows all reduction schemes)
-   */
-  CUBLASLT_MATMUL_PREF_REDUCTION_SCHEME_MASK = 3,
-
-  /** Minimum buffer alignment for matrix A (in bytes).
-   *
-   * Selecting a smaller value will exclude algorithms that can not work with matrix A that is not as strictly aligned
-   * as they need.
-   *
-   * uint32_t, default: 256
-   */
-  CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_A_BYTES = 5,
-
-  /** Minimum buffer alignment for matrix B (in bytes).
-   *
-   * Selecting a smaller value will exclude algorithms that can not work with matrix B that is not as strictly aligned
-   * as they need.
-   *
-   * uint32_t, default: 256
-   */
-  CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_B_BYTES = 6,
-
-  /** Minimum buffer alignment for matrix C (in bytes).
-   *
-   * Selecting a smaller value will exclude algorithms that can not work with matrix C that is not as strictly aligned
-   * as they need.
-   *
-   * uint32_t, default: 256
-   */
-  CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_C_BYTES = 7,
-
-  /** Minimum buffer alignment for matrix D (in bytes).
-   *
-   * Selecting a smaller value will exclude algorithms that can not work with matrix D that is not as strictly aligned
-   * as they need.
-   *
-   * uint32_t, default: 256
-   */
-  CUBLASLT_MATMUL_PREF_MIN_ALIGNMENT_D_BYTES = 8,
-
-  /** Maximum wave count.
-   *
-   * See cublasLtMatmulHeuristicResult_t::wavesCount.
-   *
-   * Selecting a non-zero value will exclude algorithms that report device utilization higher than specified.
-   *
-   * float, default: 0.0f
-   */
-  CUBLASLT_MATMUL_PREF_MAX_WAVES_COUNT = 9,
-
-  /** Numerical implementation details mask, see cublasLtNumericalImplFlags_t. Filters heuristic result to only include
-   * algorithms that use the allowed implementations.
-   *
-   * uint64_t, default: uint64_t(-1) (allow everything)
-   */
-  CUBLASLT_MATMUL_PREF_IMPL_MASK = 12,
-} cublasLtMatmulPreferenceAttributes_t;
-
-```
-
-```cpp
-// 1. 创建 preference 对象
-cublasLtMatmulPreference_t preference;
-cublasLtMatmulPreferenceInit(ltHandle, &preference);
-
-// 2. 设置最大 workspace（例如 32MB）
-size_t workspace_size = 32 * 1024 * 1024; // 32 MiB
-cublasLtMatmulPreferenceSetAttribute(
-    preference,
-    CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-    &workspace_size,
-    sizeof(workspace_size)
-);
-
-// 3. 可选：设置只允许确定性算法（避免非确定性结果）
-uint32_t isDeterministic = CUBLASLT_REDUCTION_SCHEME_INPLACE;
-cublasLtMatmulPreferenceSetAttribute(
-    preference,
-    CUBLASLT_MATMUL_PREF_REDUCTION_SCHEME_MASK,
-    &isDeterministic,
-    sizeof(isDeterministic)
-);
-
-// 4. 获取启发式推荐的算法
-cublasLtMatmulHeuristicResult_t heuristic_results[8];
-int returned_results = 0;
-cublasLtMatmulAlgoGetHeuristic(
-    ltHandle,
-    matmul_desc,
-    A_layout, B_layout, C_layout, D_layout,
-    preference,
-    8, // 最多返回 8 个候选
-    heuristic_results,
-    &returned_results
-);
-
-// 5. 使用第一个推荐算法执行 matmul
-cublasLtMatmul(
-    ltHandle,
-    matmul_desc,
-    &alpha, d_A, A_layout,
-            d_B, B_layout,
-    &beta,  d_C, C_layout,
-                    d_D, D_layout,
-    &heuristic_results[0].algo,
-    d_workspace, workspace_size,
-    stream
-);
 ```
 
 ## Python Bindings
