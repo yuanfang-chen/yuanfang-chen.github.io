@@ -1,20 +1,90 @@
 ---
 layout: post
-title:  "TMA"
-mathjax: true
+title:  "Tensor Memory Accelerator (TMA)"
 # date:   2025-11-19 11:18:26 -0800
 categories: CUDA
 ---
 
-It turns out that not only TMA load but all TMA operations are wrappers around certain cp.async.bulk instructions. The NVIDIA PTX documentation dedicates an entire section to discuss cp.async.bulk instructions, specifically their syntaxes and operands.
+## Problem Statement
+GPU Memory 
+
+- [The Memory Wall: Past, Present, and Future of DRAM](https://newsletter.semianalysis.com/p/the-memory-wall)
+- [Scaling the Memory Wall: The Rise and Roadmap of HBM](https://newsletter.semianalysis.com/p/scaling-the-memory-wall-the-rise-and-roadmap-of-hbm)
 
 
-pre-Hopper MMAs operates on threads
-Blackwell MMAs operates on CTAs
+## [Warp Specialization](https://lightsighter.org/pdfs/cudadma-sc11.pdf)
+A standard GPU program executes the same logic on each warp, while a warp specialized program uses different warps to execute different components of the overall program. Let’s take a look at some of these warp specialization strategies in the aforementioned contexts.
+
+在一个warp内，warp divergence
+
+- **CUDA-DMA**: separated the warps into memory loading (GMEM->SMEM) warps and compute warps; the loader warps issue loads and signal the compute warps when the loaded data is available.
+- **Singe compiler**: 
+- **CUDA Tensor Core**: Specialized warps are used on Hopper and Blackwell to issue either TMA copies or Tensor Core matrix-multiplies. The TMA warp issue copies and notifies the Tensor Core warps when data is ready to be multiplied, and the Tensor Core warps notify the TMA warp when data has been consumed and the memory is free to use for more copies.
+- **[high performance Flash Attention implementation on Blackwell](https://github.com/NVIDIA/cutlass/tree/a49a78ffefc86a87160dfe0ccc3a3a2d1622c918/examples/77_blackwell_fmha)**: uses at least 5 different kinds of specialized warps! In this Flash Attention implementation, there are warps for loading data, issuing matrix multiplication, computing softmax, scaling intermediate results, and storing data. As a result, the code is complex; the strategy itself is carefully constructed to yield high performance, and there is abundant cross-warp data movement and synchronization. Imagine the code above with 5 different warp cases and each cases signaling the others to proceed at different times! (多级流水：类似Asend NPU；有点像CPU流水线了？？)
+
+With warp-specialization, some warps are dedicated to memory fetches (producers), while others are dedicated to compute (consumers), and named barriers are used for synchronization between them. The idea is that the warp schedulers can then more easily hide the latency of copy operations within compute (and vice-versa).
+
+- [Independent Thread Scheduling](https://docs.nvidia.com/cuda/cuda-c-programming-guide/#independent-thread-scheduling)
+- https://rohany.github.io/blog/warp-specialization/
+- [CUDA-DMA](https://lightsighter.org/pdfs/cudadma-sc11.pdf)
+- [Singe Compiler](https://cs.stanford.edu/~sjt/pubs/ppopp14.pdf)
+- [Enabling advanced GPU features in PyTorch – Warp Specialization](https://pytorch.org/blog/warp-specialization/)
+- https://www.cs.cmu.edu/~zhihaoj2/15-779/slides/06-warp-specialization.pdf
+- [CUTLASS Tutorial: Efficient GEMM kernel designs with Pipelining](https://research.colfax-intl.com/cutlass-tutorial-design-of-a-gemm-kernel/)
 
 
-In historical context, these developments continue a trend of replacing general-purpose computational resources by specialized hardware resources, to both remove bottlenecks and free up those general-purpose resources for other operations. Starting with the Volta architecture, the Tensor Cores divorced GEMM arithmetic operations from the general computational pipeline. Ampere’s asynchronous copy instructions allowed for true pipelining of GEMM mainloops. On Hopper GPUs, the asynchronous, single-threaded TMA and the ability to reallocate registers between warpgroups dramatically reduced the register and thread cost of data movement, and the asynchronous WGMMA allowed for pipelining of MMA with other compute operations. Now, Tensor Memory and UMMA do for MMA just what TMA did for copy, making it a single-threaded, asynchronous operation that does not consume registers. As a result, registers can primarily be used for other tasks like scheduling and fused epilogue operations.
+### Hopper Warp Specialization
+There are two pipelining strategies that are effective on the Hopper architecture:
 
+- **Warp-specialization**. Specializing warps into producers (data transfer) and consumers (compute), and having them run concurrently.
+- **Multistage**. Masking data transfer by using asynchronous copy (TMA on Hopper or cp.async on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
+
+
+![alt text](<Screenshot 2025-11-21 at 3.54.19 PM.png>)
+
+
+### Blackwell Warp Specialization
+
+## Pipelining
+**The blocked structure demands a large storage allocation within the registers of each CUDA thread. The accumulator elements typically occupy at least half a thread’s total register budget. Consequently, occupancy – the number of concurrent threads, warps, and threadblocks – is relatively low compared to other classes of GPU workloads. This limits the GPU’s ability to hide memory latency and other stalls by context switching to other concurrent threads within an SM.**
+
+To mitigate the effects of memory latency, CUTLASS uses software pipelining to overlap memory accesses with other computation within a thread. CUTLASS accomplishes this by **double buffering** at the following scopes.
+
+- **Threadblock-scoped shared memory tiles**: two tiles are allocated in shared memory. One is used to load data for the current matrix operation, while the other tile is used to buffer data loaded from global memory for the next mainloop iteration.
+
+- **Warp-scoped matrix fragments**: two fragments are allocated within registers. One fragment is passed to CUDA and TensorCores during the current matrix computation, while the other is used to receive shared memory fetch returns for the next warp-level matrix operation.
+
+The following diagram illustrates the efficient, pipelined mainloop body used in CUTLASS GEMMs.
+![alt text](image-2.png)
+
+### cuda::pipeline
+CUDA provides the cuda::pipeline synchronization object to manage and overlap asynchronous data movement with computation.
+
+Pipeline Class Member Function: `producer_acquire`/`producer_commit`/`consumer_wait`/`consumer_release`
+
+
+## Ampere - Asynchronous Data Copy (`cp.async`)
+With Ampere, NVIDIA introduced asynchronous data copy, a way of copying data directly from global memory to shared memory in an asynchronous fashion. To load data from global memory to shared memory on Volta, threads must first load data from global memory to registers, and then store it to shared memory. However, MMA instructions have high register usage and must share the register file with data-loading operations, causing high register pressure and wasting memory bandwidth for copying data in and out of RF.
+
+Async data copy mitigates this issue by fetching data from global memory (DRAM) and directly storing it into shared memory (with optional L1 access), freeing up more registers for MMA instructions. Data loading and compute can happen asynchronously which is more difficult from a programming model perspective but unlocks higher performance.
+
+This feature is implemented as PTX instruction thread-level async copy cp.async (documentation). The corresponding SASS is LDGSTS, asynchronous global to shared memory copy. The exact synchronization methods are async-group and mbarrier-based completion mechanisms, detailed here.
+![alt text](image.png)
+
+[Controlling Data Movement to Boost Performance on the NVIDIA Ampere Architecture](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/)
+
+## Hopper - Tensor Memory Accelerator (`cp.async.bulk`)
+The NVIDIA Hopper Architecture provides new features that improve asynchronous execution and enable further overlap of memory copies with computation and other independent work, while also minimizing synchronization points. We describe the new async memory copy unit called the Tensor Memory Accelerator (TMA) and a new asynchronous transaction barrier.
+
+All TMA operations are wrappers around certain cp.async.bulk instructions.
+
+- pre-Hopper MMAs operates on threads
+- Blackwell MMAs operates on CTAs
+
+
+> In historical context, these developments continue a trend of replacing general-purpose computational resources by specialized hardware resources, to both remove bottlenecks and free up those general-purpose resources for other operations. Starting with the Volta architecture, the Tensor Cores divorced GEMM arithmetic operations from the general computational pipeline. Ampere’s asynchronous copy instructions allowed for true pipelining of GEMM mainloops. On Hopper GPUs, the asynchronous, single-threaded TMA and the ability to reallocate registers between warpgroups dramatically reduced the register and thread cost of data movement, and the asynchronous WGMMA allowed for pipelining of MMA with other compute operations. Now, Tensor Memory and UMMA do for MMA just what TMA did for copy, making it a single-threaded, asynchronous operation that does not consume registers. As a result, registers can primarily be used for other tasks like scheduling and fused epilogue operations.
+
+![Figure 14. Asynchronous execution concurrency and enhancements in NVIDIA Hopper](image-1.png)
 
 The [shared memory descriptor](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-shared-memory-descriptor) describes the properties of multiplicand matrix in shared memory including its location in the shared memory of the current CTA. It is a 64-bit value contained in a register with the following layout:
 
@@ -24,3 +94,53 @@ The [instruction descriptor](https://docs.nvidia.com/cuda/parallel-thread-execut
 Typically, data gets into TMEM via UMMA operations, and is explicitly moved out to registers using tcgen05.ld for post-processing. It’s also possible for threads to manually load data into TMEM, either from SMEM through tcgen05.cp or from registers through tcgen05.st. However, TMEM access patterns for explicit load and store are very restricted. Each warp within a warpgroup can only access 32 lanes (with warp 0 associated to lanes 0-31, warp 1 to lanes 32-63, and so forth). Additionally, both the UMMA operation and the data movement operations expect certain data layouts. Luckily for us, CUTLASS provides utility functions that we’ll cover later that simplify the process of organizing data via swizzling. That said, those interested can find the layout information in the PTX guide.
 
 Finally, besides UMMA operations and these data movement instructions, no other operations access data from TMEM. In other words, all pre-processing must happen before the data is loaded onto TMEM, and all post-processing must happen after the data is retrieved out of TMEM.
+
+## Programming Model
+### PTX
+- cp.async (SM80, SM86, SM89)
+- TMA (“Tensor Memory Accelerator”) async loads (SM90 / Hopper, SM100 / Blackwell)
+
+TODO: examples
+
+### CUTLASS
+TODO: examples
+
+### CUDA-C++
+cuda::memcpy_async() (a C++20 <cuda/pipeline> API) launches an asynchronous DMA-like transfer from global memory (GMEM) to shared memory (SMEM).
+The calling thread/warp does not stall.
+
+TODO: examples
+```cpp
+#include <cuda/pipeline>
+
+__global__ void kernel(float* gmem, float* smem) {
+    cuda::pipeline<cuda::thread_scope_thread> pipe;
+
+    // issue async copy
+    cuda::memcpy_async(pipe, smem, gmem, 1024);
+
+    // commit the transaction
+    pipe.commit();
+
+    // wait until data arrives in shared memory
+    pipe.wait_prior<0>();
+
+    // safe to read smem now
+    float x = smem[0];
+}
+```
+
+## Async Completion Mechanism
+
+
+### std::barrier
+
+### Async Proxy
+
+## How to choose
+As the PTX instructions name suggests:
+- Use `cp.async` for transferring small amount of data
+- Use `cp.async.bulk` for transferring large amount of data
+
+## References
+PTX: https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-asynchronous-copy

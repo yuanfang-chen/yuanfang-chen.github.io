@@ -1,7 +1,6 @@
 ---
 layout: post
 title:  "MoE"
-mathjax: true
 # date:   2025-11-19 11:18:26 -0800
 categories: CUDA
 ---
@@ -13,4 +12,5 @@ One example where this approach provides speedup is the generation phase of a mi
 
 
 ## References
-https://developer.nvidia.com/blog/introducing-grouped-gemm-apis-in-cublas-and-more-performance-updates/
+- [Applying Mixture of Experts in LLM Architectures](https://developer.nvidia.com/blog/applying-mixture-of-experts-in-llm-architectures/)
+- [Introducing Grouped GEMM APIs in cuBLAS and More Performance Updates](https://developer.nvidia.com/blog/introducing-grouped-gemm-apis-in-cublas-and-more-performance-updates/)
