@@ -36,10 +36,9 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 - [GTC'25 Enable Tensor Core Programming in Python with CUTLASS 4.0](https://www.nvidia.com/en-us/on-demand/session/gtc25-s74639/)
 
 
-
 ## Official Blogs Related to CUTLASS
-- [Oct 2017 - Programming Tensor Cores in CUDA 9](https://developer.nvidia.com/blog/programming-tensor-cores-cuda-9/)
-- [Dec 2017 - CUTLASS: Fast Linear Algebra in CUDA C++](https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda/)
+- [Oct 2017 - Volta - Programming Tensor Cores in CUDA 9](https://developer.nvidia.com/blog/programming-tensor-cores-cuda-9/)
+- [Dec 2017 - Volta - CUTLASS: Fast Linear Algebra in CUDA C++](https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda/)
 - [July 2024 - Next Generation of FlashAttention](https://developer.nvidia.com/blog/next-generation-of-flashattention/)
 - [July 2025 - CUTLASS 3.x: Orthogonal, Reusable, and Composable Abstractions for GEMM Kernel Design ](https://developer.nvidia.com/blog/cutlass-3-x-orthogonal-reusable-and-composable-abstractions-for-gemm-kernel-design/)
 - [July 2025 -  CUTLASS: Principled Abstractions for Handling Multidimensional Data Through Tensors and Spatial Microkernels](https://developer.nvidia.com/blog/cutlass-principled-abstractions-for-handling-multidimensional-data-through-tensors-and-spatial-microkernels/)
@@ -64,6 +63,7 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 - [Inside NVIDIA Blackwell Ultra: The Chip Powering the AI Factory Era](https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/)
 - [Blackwell GPGPU架构新特性概览](https://zhuanlan.zhihu.com/p/32148105488)
 - [Optimization Techniques for GPU Programming](https://dl.acm.org/doi/fullHtml/10.1145/3570638)
+- [Deep Dive on CUTLASS Ping-Pong GEMM Kernel](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/)
 
 
 ## Deep Learning Concepts

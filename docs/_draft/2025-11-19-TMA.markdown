@@ -6,19 +6,32 @@ categories: CUDA
 ---
 
 ## Problem Statement
-GPU Memory 
-
-- [The Memory Wall: Past, Present, and Future of DRAM](https://newsletter.semianalysis.com/p/the-memory-wall)
-- [Scaling the Memory Wall: The Rise and Roadmap of HBM](https://newsletter.semianalysis.com/p/scaling-the-memory-wall-the-rise-and-roadmap-of-hbm)
 
 
-## [Warp Specialization](https://lightsighter.org/pdfs/cudadma-sc11.pdf)
+
+
+In historical context, these developments continue a trend of replacing general-purpose computational resources by specialized hardware resources, to both remove bottlenecks and free up those general-purpose resources for other operations. Starting with the Volta architecture, the Tensor Cores divorced GEMM arithmetic operations from the general computational pipeline. Ampere’s asynchronous copy instructions allowed for true pipelining of GEMM mainloops. On Hopper GPUs, the asynchronous, single-threaded TMA and the ability to reallocate registers between warpgroups dramatically reduced the register and thread cost of data movement, and the asynchronous WGMMA allowed for pipelining of MMA with other compute operations. Now, Tensor Memory and UMMA do for MMA just what TMA did for copy, making it a single-threaded, asynchronous operation that does not consume registers. As a result, registers can primarily be used for other tasks like scheduling and fused epilogue operations.
+
+**大的背景是把专有算力和通用算力在架构上分离，从而达到提高性能的目的。**
+
+
+
+## Methodology
+
+算存比，提高内存带宽利用率，需要用到异步来overlap计算和拷贝
+
+## Asynchrony
+
+
+## [Warp Specialization](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#spatial-partitioning-also-known-as-warp-specialization)
+Warp Specialization is introduced in Hopper.
+
 A standard GPU program executes the same logic on each warp, while a warp specialized program uses different warps to execute different components of the overall program. Let’s take a look at some of these warp specialization strategies in the aforementioned contexts.
 
 在一个warp内，warp divergence
 
-- **CUDA-DMA**: separated the warps into memory loading (GMEM->SMEM) warps and compute warps; the loader warps issue loads and signal the compute warps when the loaded data is available.
-- **Singe compiler**: 
+- **[CUDA-DMA](https://lightsighter.org/pdfs/cudadma-sc11.pdf)**: separated the warps into memory loading (GMEM->SMEM) warps and compute warps; the loader warps issue loads and signal the compute warps when the loaded data is available.
+- **[Singe compiler](https://cs.stanford.edu/~sjt/pubs/ppopp14.pdf)**: 
 - **CUDA Tensor Core**: Specialized warps are used on Hopper and Blackwell to issue either TMA copies or Tensor Core matrix-multiplies. The TMA warp issue copies and notifies the Tensor Core warps when data is ready to be multiplied, and the Tensor Core warps notify the TMA warp when data has been consumed and the memory is free to use for more copies.
 - **[high performance Flash Attention implementation on Blackwell](https://github.com/NVIDIA/cutlass/tree/a49a78ffefc86a87160dfe0ccc3a3a2d1622c918/examples/77_blackwell_fmha)**: uses at least 5 different kinds of specialized warps! In this Flash Attention implementation, there are warps for loading data, issuing matrix multiplication, computing softmax, scaling intermediate results, and storing data. As a result, the code is complex; the strategy itself is carefully constructed to yield high performance, and there is abundant cross-warp data movement and synchronization. Imagine the code above with 5 different warp cases and each cases signaling the others to proceed at different times! (多级流水：类似Asend NPU；有点像CPU流水线了？？)
 
@@ -26,11 +39,14 @@ With warp-specialization, some warps are dedicated to memory fetches (producers)
 
 - [Independent Thread Scheduling](https://docs.nvidia.com/cuda/cuda-c-programming-guide/#independent-thread-scheduling)
 - https://rohany.github.io/blog/warp-specialization/
-- [CUDA-DMA](https://lightsighter.org/pdfs/cudadma-sc11.pdf)
-- [Singe Compiler](https://cs.stanford.edu/~sjt/pubs/ppopp14.pdf)
 - [Enabling advanced GPU features in PyTorch – Warp Specialization](https://pytorch.org/blog/warp-specialization/)
 - https://www.cs.cmu.edu/~zhihaoj2/15-779/slides/06-warp-specialization.pdf
-- [CUTLASS Tutorial: Efficient GEMM kernel designs with Pipelining](https://research.colfax-intl.com/cutlass-tutorial-design-of-a-gemm-kernel/)
+- [Part 1, this one] discusses the warpgroup matrix-multiply-accumulate (WGMMA) instructions. These are the primitive instructions that target the Tensor Core of NVIDIA GPUs based on the Hopper architecture.
+  https://research.colfax-intl.com/cutlass-tutorial-wgmma-hopper/
+  [Part 2] will discuss the overall design of an efficient GEMM kernel, including advanced techniques used in CUTLASS kernels such as warp-specialization and ping-pong scheduling.
+  https://research.colfax-intl.com/cutlass-tutorial-design-of-a-gemm-kernel/
+  [Part 3] will discuss persistent kernels and Stream-K, a load-balancing strategy for GEMM that achieves state-of-the-art efficiency across a vast number of problem geometries.
+  https://research.colfax-intl.com/cutlass-tutorial-persistent-kernels-and-stream-k/
 
 
 ### Hopper Warp Specialization
@@ -76,7 +92,24 @@ This feature is implemented as PTX instruction thread-level async copy cp.async 
 ## Hopper - Tensor Memory Accelerator (`cp.async.bulk`)
 The NVIDIA Hopper Architecture provides new features that improve asynchronous execution and enable further overlap of memory copies with computation and other independent work, while also minimizing synchronization points. We describe the new async memory copy unit called the Tensor Memory Accelerator (TMA) and a new asynchronous transaction barrier.
 
-All TMA operations are wrappers around certain cp.async.bulk instructions.
+
+
+The primary difference between the one-dimensional and multi-dimensional case is that a tensor map must be created on the host and passed to the CUDA kernel. 
+
+[cuTensorMap](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY)
+
+| Method                                                       | Description                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [cuTensorMapEncodeIm2col](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1gb14d707a18d23fc0c3e22a67ceedc15a) | Create a tensor map descriptor object representing im2col memory region. |
+| [cuTensorMapEncodeIm2colWide](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1g6c1be81856c4e311f085e33a42403444) | Create a tensor map descriptor object representing im2col memory region, but where the elements are exclusively loaded along the W dimension. |
+| [cuTensorMapEncodeTiled](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1ga7c7d2aaac9e49294304e755e6f341d7) | Create a tensor map descriptor object representing tiled memory region. |
+| [cuTensorMapReplaceAddress](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1g8d54c0ff5c49b1b1a9baaac6fc796db3) | Modify an existing tensor map descriptor with an updated global address. |
+
+![image-20251125173533600](/Users/ychen2/Library/Application Support/typora-user-images/image-20251125173533600.png)
+
+
+
+
 
 - pre-Hopper MMAs operates on threads
 - Blackwell MMAs operates on CTAs
@@ -142,5 +175,36 @@ As the PTX instructions name suggests:
 - Use `cp.async` for transferring small amount of data
 - Use `cp.async.bulk` for transferring large amount of data
 
+
+## why need TMA
+
+
+
+Many applications require movement of large amounts of data from and to global memory. Often, the data is laid out in global memory as a multi-dimensional array with non-sequential data acess patterns. To reduce global memory usage, sub-tiles of such arrays are copied to shared memory before use in computations. The loading and storing involves address-calculations that can be error-prone and repetitive. To offload these computations, Compute Capability 9.0 introduces the Tensor Memory Accelerator (TMA). The primary goal of TMA is to provide an efficient data transfer mechanism from global memory to shared memory for multi-dimensional arrays.
+
+Dimensions. TMA supports copying both one-dimensional and multi-dimensional arrays (up to 5-dimensional). The programming model for bulk-asynchronous copies of one-dimensional contiguous arrays is different from the programming model for bulk tensor asynchronous copies of multi-dimensional arrays. To perform a bulk tensor asynchronous copy of a multi-dimensional array, the hardware requires a tensor map. This object describes the layout of the multi-dimensional array in global and shared memory. A tensor map is typically created on the host using the cuTensorMapEncode API and then transferred from host to device as a const kernel parameter annotated with __grid_constant__. The tensor map is transferred from host to device as a const kernel parameter annotated with __grid_constant__, and can be used on the device to copy a tile of data between shared and global memory. In contrast, performing a bulk-asynchronous copy of a contiguous one-dimensional array does not require a tensor map: it can be performed on-device with a pointer and size parameter.
+
+
+- GPU的效率最大化依赖充分利用core的算力和内存带宽
+- 如果算力（即MMA）需要绑定寄存器，那可能带来SM occupyancy不足的问题，进一步导致无法launch足够的warp来掩盖memory latency
+
+
+## [PTX `mbarrier`](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-mbarrier)
+
+## [PTX `membar`/`fence`](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-membar)
+
+## [PTX atom](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-atom)
+
+## [Async Proxy](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#async-proxy)
+
+https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#proxies
+
+[Isolating Traffic with Domains](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#isolating-traffic-with-domains)
+
+## [Multicast Support](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#multicast-support)
+
+
+
 ## References
 PTX: https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-asynchronous-copy
+
