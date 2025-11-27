@@ -3,6 +3,7 @@ layout: post
 title:  "Asynchrony (CUDA C++)"
 date:   2025-11-26 11:18:26 -0800
 categories: CUDA
+typora-root-url: ..
 ---
 
 ## 问题背景 - CUDA编程往异步化发展要解决什么问题

@@ -3,6 +3,7 @@ layout: post
 title:  "CUTLASS cute API summary"
 date:   2025-11-11 11:18:26 -0800
 categories: CUDA
+typora-root-url: ..
 ---
 
 <!-- <nav class="toc-fixed" markdown="1"> -->

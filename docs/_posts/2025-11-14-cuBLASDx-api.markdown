@@ -4,6 +4,7 @@ title:  "cuBLASDx总结"
 date:   2025-11-14 11:18:26 -0800
 categories: CUDA
 mathjax: true
+typora-root-url: ..
 ---
 
 * TOC
