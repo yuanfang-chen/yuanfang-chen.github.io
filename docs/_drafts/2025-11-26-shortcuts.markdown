@@ -3,6 +3,7 @@ layout: post
 title:  "Shortcuts"
 # date:   2025-11-28 11:18:26 -0800
 categories: random
+typora-root-url: ..
 ---
 
 # [MacOS](https://support.apple.com/en-us/102650)
@@ -79,7 +80,8 @@ xxx
 
 ## [Chrome](https://support.google.com/chrome/answer/157179)
 
-Xxx
+- Command (⌘) + R：普通刷新（重新加载当前页面）。
+- Command (⌘) + Shift + R：强制刷新（忽略缓存，从服务器重新加载所有资源）。
 
 ## Wechat
 

@@ -34,6 +34,7 @@ CUBLASLt（cuBLAS Light）是 NVIDIA cuBLAS 库的一个轻量级、灵活且高
    | `CUBLASLT_MATMUL_DESC_B_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
    | `CUBLASLT_MATMUL_DESC_C_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
    | `CUBLASLT_MATMUL_DESC_D_SCALE_POINTER` | 与`CUBLASLT_MATMUL_DESC_A_SCALE_POINTER`等价 |
+   
     TODO:
 
 1. A/B/C的布局描述（`cublasLtMatrixLayout_t`）包括：
@@ -57,7 +58,7 @@ CUBLASLt（cuBLAS Light）是 NVIDIA cuBLAS 库的一个轻量级、灵活且高
     const cublasLtMatmulTile_t tileId = CUBLASLT_MATMUL_TILE_16x16; // 5
     const cublasLtReductionScheme_t reductionMode = CUBLASLT_REDUCTION_SCHEME_INPLACE; // 1
     const int32_t splitKFactor = 256;
-
+    
     cublasLtMatmulAlgoInit(ltHandle,  //
                            CUBLAS_COMPUTE_64F,   // compute
                            CUDA_R_64F,   // scale
@@ -67,7 +68,7 @@ CUBLASLt（cuBLAS Light）是 NVIDIA cuBLAS 库的一个轻量级、灵活且高
                            CUDA_R_64F,   // D
                            algoId,
                            &algo);
-
+    
     cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tileId, sizeof(tileId));
     cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionMode, sizeof(reductionMode));
     cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitKFactor, sizeof(splitKFactor));

@@ -3,6 +3,7 @@ layout: post
 title:  "CUDA Performance Analysis"
 # date:   2025-11-21 11:18:26 -0800
 categories: CUDA
+typora-root-url: ..
 ---
 
 ## XX

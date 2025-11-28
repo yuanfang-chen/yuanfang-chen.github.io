@@ -2,6 +2,7 @@
 layout: post
 title: CUTLASS/cute resources
 categories: CUDA
+typora-root-url: ..
 ---
 
 ## Concepts

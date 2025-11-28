@@ -3,6 +3,7 @@ layout: post
 title:  "Tensor Memory Accelerator (TMA)"
 # date:   2025-11-19 11:18:26 -0800
 categories: CUDA
+typora-root-url: ..
 ---
 
 ## Problem Statement
@@ -56,7 +57,7 @@ There are two pipelining strategies that are effective on the Hopper architectur
 - **Multistage**. Masking data transfer by using asynchronous copy (TMA on Hopper or cp.async on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
 
 
-![alt text](<Screenshot 2025-11-21 at 3.54.19 PM.png>)
+![alt text](/assets/images/hopper-register.png)
 
 
 ### Blackwell Warp Specialization
@@ -71,7 +72,7 @@ To mitigate the effects of memory latency, CUTLASS uses software pipelining to o
 - **Warp-scoped matrix fragments**: two fragments are allocated within registers. One fragment is passed to CUDA and TensorCores during the current matrix computation, while the other is used to receive shared memory fetch returns for the next warp-level matrix operation.
 
 The following diagram illustrates the efficient, pipelined mainloop body used in CUTLASS GEMMs.
-![alt text](image-2.png)
+![alt text](assets/images/cutlass-mainloop.png)
 
 ### cuda::pipeline
 CUDA provides the cuda::pipeline synchronization object to manage and overlap asynchronous data movement with computation.
@@ -85,7 +86,7 @@ With Ampere, NVIDIA introduced asynchronous data copy, a way of copying data dir
 Async data copy mitigates this issue by fetching data from global memory (DRAM) and directly storing it into shared memory (with optional L1 access), freeing up more registers for MMA instructions. Data loading and compute can happen asynchronously which is more difficult from a programming model perspective but unlocks higher performance.
 
 This feature is implemented as PTX instruction thread-level async copy cp.async (documentation). The corresponding SASS is LDGSTS, asynchronous global to shared memory copy. The exact synchronization methods are async-group and mbarrier-based completion mechanisms, detailed here.
-![alt text](image.png)
+![alt text](/assets/images/ampere-async-copy.png)
 
 [Controlling Data Movement to Boost Performance on the NVIDIA Ampere Architecture](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/)
 
@@ -105,10 +106,7 @@ The primary difference between the one-dimensional and multi-dimensional case is
 | [cuTensorMapEncodeTiled](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1ga7c7d2aaac9e49294304e755e6f341d7) | Create a tensor map descriptor object representing tiled memory region. |
 | [cuTensorMapReplaceAddress](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html#group__CUDA__TENSOR__MEMORY_1g8d54c0ff5c49b1b1a9baaac6fc796db3) | Modify an existing tensor map descriptor with an updated global address. |
 
-![image-20251125173533600](/Users/ychen2/Library/Application Support/typora-user-images/image-20251125173533600.png)
-
-
-
+![image-20251125173533600](/assets/images/cuTensorMapEncodeTiled.png)
 
 
 - pre-Hopper MMAs operates on threads
@@ -117,7 +115,7 @@ The primary difference between the one-dimensional and multi-dimensional case is
 
 > In historical context, these developments continue a trend of replacing general-purpose computational resources by specialized hardware resources, to both remove bottlenecks and free up those general-purpose resources for other operations. Starting with the Volta architecture, the Tensor Cores divorced GEMM arithmetic operations from the general computational pipeline. Ampere’s asynchronous copy instructions allowed for true pipelining of GEMM mainloops. On Hopper GPUs, the asynchronous, single-threaded TMA and the ability to reallocate registers between warpgroups dramatically reduced the register and thread cost of data movement, and the asynchronous WGMMA allowed for pipelining of MMA with other compute operations. Now, Tensor Memory and UMMA do for MMA just what TMA did for copy, making it a single-threaded, asynchronous operation that does not consume registers. As a result, registers can primarily be used for other tasks like scheduling and fused epilogue operations.
 
-![Figure 14. Asynchronous execution concurrency and enhancements in NVIDIA Hopper](image-1.png)
+![Figure 14. Asynchronous execution concurrency and enhancements in NVIDIA Hopper](/assets/images/hopper-sync.png)
 
 The [shared memory descriptor](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-shared-memory-descriptor) describes the properties of multiplicand matrix in shared memory including its location in the shared memory of the current CTA. It is a 64-bit value contained in a register with the following layout:
 
