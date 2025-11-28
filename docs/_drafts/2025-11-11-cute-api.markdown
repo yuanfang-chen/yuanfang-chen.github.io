@@ -398,6 +398,7 @@ ceil_div(Target                 const& target,
 # Reference
 
 1. https://zhuanlan.zhihu.com/p/28356098779
-2. https://zhuanlan.zhihu.com/p/662089556
-3. https://zhuanlan.zhihu.com/p/22300321859
+1. https://zhuanlan.zhihu.com/p/662089556
+1. https://zhuanlan.zhihu.com/p/22300321859
+1. [GPUMode - Lecture 57: CuTe](https://www.youtube.com/watch?v=vzUhbDO_0qk)
 
