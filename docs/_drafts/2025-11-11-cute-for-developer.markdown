@@ -1,31 +1,42 @@
 ---
 layout: post
-title:  "CUTLASS cute API summary"
-date:   2025-11-11 11:18:26 -0800
+title:  "CUTLASS cute for developer"
+# date:   2025-11-11 11:18:26 -0800
 categories: CUDA
 typora-root-url: ..
 ---
 
-<!-- <nav class="toc-fixed" markdown="1"> -->
-<!-- * TOC
-{:toc} -->
-<!-- </nav> -->
+* TOC
+{:toc}
+## Library Organization
 
-# include/cute/numeric/arithmetic_tuple.hpp
+CuTe is a header-only C++ library, so there is no source code that needs building. Library headers are contained within the top level [`include/cute`](https://github.com/NVIDIA/cutlass/tree/main/include/cute) directory, with components of the library grouped by directories that represent their semantics.
+
+| Directory                                                    | Contents                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [`include/cute`](https://github.com/NVIDIA/cutlass/tree/main/include/cute) | Each header in the top level corresponds to one of the fundamental building blocks of CuTe, such as [`Layout`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/layout.hpp) and [`Tensor`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/tensor.hpp). |
+| [`include/cute/container`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/container) | Implementations of STL-like objects, such as tuple, array, and aligned array. |
+| [`include/cute/numeric`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/numeric) | Fundamental numeric data types that include nonstandard floating-point types, nonstandard integer types, complex numbers, and integer sequence. |
+| [`include/cute/algorithm`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/algorithm) | Implementations of utility algorithms such as copy, fill, and clear that automatically leverage architecture-specific features if available. |
+| [`include/cute/arch`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/arch) | Wrappers for architecture-specific matrix-matrix multiply and copy instructions. |
+| [`include/cute/atom`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/atom) | Meta-information for instructions in `arch` and utilities like partitioning and tiling. |
+
+
+## include/cute/numeric/arithmetic_tuple.hpp
 a lightweight numeric tuple type defined as `template<class... T> struct ArithmeticTuple : public tuple<T...> { ... };`. It wraps a cute::tuple and provides element-wise numeric semantics (constructors, arithmetic operators, printing, and iterator support).
 
-## ScaledBasis 
+### ScaledBasis 
 ScaledBasis is the CuTe representation of a single “basis” element for arithmetic tuples — i.e., a tuple that is zero everywhere except one leaf/mode where it holds a value. It is used to build and manipulate sparse/per-mode arithmetic increments and to index into hierarchical shapes.
 // Shortcuts
-// E<>    := _1
-// E<0>   := (_1,_0,_0,...)
-// E<1>   := (_0,_1,_0,...)
-// E<0,0> := ((_1,_0,_0,...),_0,_0,...)
-// E<0,1> := ((_0,_1,_0,...),_0,_0,...)
-// E<1,0> := (_0,(_1,_0,_0,...),_0,...)
-// E<1,1> := (_0,(_0,_1,_0,...),_0,...)
+`E<> := _1`
+`E<0> := (_1,_0,_0,...)`
+`E<1>  := (_0,_1,_0,...)`
+`E<0,0> := ((_1,_0,_0,...),_0,_0,...)`
+`E<0,1> := ((_0,_1,_0,...),_0,_0,...)`
+`E<1,0> := (_0,(_1,_0,_0,...),_0,...)`
+`E<1,1> := (_0,(_0,_1,_0,...),_0,...)`
 
-# include/cute/container/tuple.hpp
+## include/cute/container/tuple.hpp
 行为和`std::tuple`相同，区别是`Tuple`可以运行在主机端和设备端。
 cute::tuple is like std::tuple, with differences:
 
@@ -47,10 +58,8 @@ the conversion SFINAE, special overloading, and avoiding cvref template types.
 
 Over standard-conforming tuple implementations, this appears to accelerate compilation times by over 3x.
 
-tuple_seq<(_32,_8,_2)>{} = (_0,_1,_2)
-
-# include/cute/algorithm/tuple_algorithms.hpp
-## API列表
+## include/cute/algorithm/tuple_algorithms.hpp
+### API列表
 `t` represents tuple, when there are multiple `t`s, use `ta`, `tb`, `tc`; `f` represents lambda; `x` means scalar
 * `apply(t, f)`: unpack. (t, f) => f(t_0,t_1,...,t_n)
 * `transform_apply(t, f, g)`: (t, f, g) => g(f(t_0),f(t_1),...)
@@ -109,7 +118,7 @@ tuple_seq<(_32,_8,_2)>{} = (_0,_1,_2)
 
 * `reverse(t)`: return A tuple of the elements of `t` in reverse order
 
-# InTuple
+## IntTuple
 
 CuTe defines the IntTuple concept as either an integer, or a tuple of IntTuples. Note the recursive definition. 
 
@@ -118,7 +127,7 @@ CuTe defines the IntTuple concept as either an integer, or a tuple of IntTuples.
 * terminal... 
 
 
-## API列表
+### API列表
 
 * `get<I>(IntTuple)`: The `I`th element of the `IntTuple`, with `I < rank`. For single integers, `get<0>` is just that integer.
 
@@ -180,7 +189,7 @@ CuTe defines the IntTuple concept as either an integer, or a tuple of IntTuples.
 * `filter_zeros`:
 
 
-## Converters and constructors with arrays and params
+### Converters and constructors with arrays and params
 * `make_int_tuple(t, n, init)`
     ```cpp
     /** Make an IntTuple of rank N from an Indexable array.
@@ -237,7 +246,7 @@ CuTe defines the IntTuple concept as either an integer, or a tuple of IntTuples.
     to_array(IntTuple const& t)
     ```
 
-## Comparison operators
+### Comparison operators
 Lexicographical comparison
 * `lex_less(IntTupleA, IntTupleB)`:
 * `lex_leq(IntTupleA, IntTupleB)`: `!lex_less(IntTupleB, IntTupleA)`
@@ -257,8 +266,8 @@ Elementwise [all] comparison
 * `elem_geq(IntTupleA, IntTupleB)`: `!elem_less(IntTupleA, IntTupleB)`
 
 
-# Layout algebra
-## Layout construction
+## Layout algebra
+### Layout construction
 * `make_shape(Ts const&... t)`
 * `make_stride(Ts const&... t)`
 * `make_step(Ts const&... t)`
@@ -267,33 +276,37 @@ Elementwise [all] comparison
 * `make_layout(Shape const& shape, Stride const& stride)`
 * `make_layout(Shape const& shape)`
 
-## Convenience tags for common layouts
+### Convenience tags for common layouts
 * `make_layout(Shape const& shape, LayoutLeft)`
 * `make_layout(Shape const& shape, LayoutRight)`
 
-## Construct a layout from multiple layouts by concatenation
-* make_layout(Layout<Shape0,Stride0> const& layout0)
-* make_layout(Layout<Shape0,Stride0> const& layout0,
-              Layout<Shape1,Stride1> const& layout1)
-* make_layout(Layout<Shape0,Stride0> const& layout0,
-              Layout<Shape1,Stride1> const& layout1,
-              Layout<Shapes,Strides> const&... layouts)
+### Construct a layout from multiple layouts by concatenation
+```cpp
+make_layout(Layout<Shape0,Stride0> const& layout0);
 
-## Advanced Layout constructions
+make_layout(Layout<Shape0,Stride0> const& layout0,
+            Layout<Shape1,Stride1> const& layout1);
+
+make_layout(Layout<Shape0,Stride0> const& layout0,
+            Layout<Shape1,Stride1> const& layout1,
+            Layout<Shapes,Strides> const&... layouts);
+```
+
+### Advanced Layout constructions
 * `make_ordered_layout`
 * `make_layout_like`
 * `make_fragment_like`
 * `make_fragment_like`
 * `make_identity_layout`: Make an identity layout that maps a coordinate to itself
 
-## Operations to manipulate Layouts like a tuple of pairs
+### Operations to manipulate Layouts like a tuple of pairs
 * `get(layout)`
 * `take`
 * `select`
 * `flatten(layout)`: Return a layout with depth at most 1
 * `unflatten(layout)`: Return a layout whose profile is congruent to TargetProfile
 
-## Utilities
+### Utilities
 * `layout<...I>()`: Return the sublayout of mode I...
 * `shape(layout)`: Return the shape of a mode
 * `stride(layout)`: Return the stride of a mode
@@ -305,17 +318,22 @@ Elementwise [all] comparison
 * `cosize(layout)`: Return the codomain size of a mode
 * `crd2idx(layout)`: With crd2idx(coord, shape), makes sense to have crd2idx(coord, Layout) as well
 
-## Slice and Dice a layout
-slice
-slice_and_offset
-dice
-domain_offset
+### Slice and Dice a layout
+```cpp
+slice(Coord const& c, Layout<Shape,Stride> const& layout);
 
-## Transform the modes of a layout
+slice_and_offset(Coord const& c, Layout<Shape,Stride> const& layout);
+
+dice(Coord const& c, Layout<Shape,Stride> const& layout);
+
+domain_offset(Coord const& coord, Layout<Shape,Stride> const& layout);
+```
+
+### Transform the modes of a layout
 transform_layout
 transform_layout
 
-## Coalesce and Filter
+### Coalesce and Filter
 * `coalesce(layout)`: 对Layout的mode从右往左扫描，apply一下逻辑
 * coalesce(layout, target_profile)
 * coalesce(shape): Combine static and dynamic modes of a shape.
@@ -324,7 +342,7 @@ transform_layout
 * `filter(layout)`: Remove all of the 0-strides and 1-sizes, Return 1-shape if empty
 * `filter(layout, target_profile)`: Apply filter at the terminals of trg_profile
 
-## Append, Prepend, replace
+### Append, Prepend, replace
 * append
 * append
 * prepend
@@ -332,29 +350,29 @@ transform_layout
 * replace
 * `group<B,E>(layout)`
 
-## Composition of two layouts: lhs o rhs
+### Composition of two layouts: lhs o rhs
 * `composition(layoutA, layoutB)`
 * `composition(layout, tiler)`: `tiler` is tuple, or static integral, or dynamic integral
 
-## Complement
+### Complement
 * `complement(layout, cotarget)`
 * `complement(layout)`
 
-## Right-Inverse and Left-Inverse
+### Right-Inverse and Left-Inverse
 right_inverse(layout)
 left_inverse(layout)
 
-## Max Common Layout
+### Max Common Layout
 * `max_common_layout(layoutA, layoutB)`: Return a layout that points to the maximum number of contiguous elements that logically correspond in the layouts of a and b
 * `max_common_vector(layoutA, layoutB)`: Return Int<N> such that N is the maximum number of contiguous elements that logically correspond in the layouts of a and b
 * `domain_distribute(ShapeA, ShapeB)`: Return a layout that distributes ShapeB over ShapeA
 * `nullspace(layout)`: Kernel (Nullspace) of a Layout
 
-## zip
+### zip
 * `zip(layout)`
 * `zip(layoutA, layoutB)`
 
-## Tile unzip
+### Tile unzip
 * tile_unzip
 ```cpp
 //
@@ -371,7 +389,7 @@ tile_unzip(Layout<LShape,LStride> const& layout,
            Tiler                  const& tiler)
 ```
 
-## Logical divide
+### Logical divide
 * `logical_divide(layoutA, layoutB)`
 * `logical_divide(layoutA, tiler)`
 * `ceil_div`
@@ -394,11 +412,14 @@ ceil_div(Target                 const& target,
 
 
 
+## ComposedLayout
 
-# Reference
+TODO
 
-1. https://zhuanlan.zhihu.com/p/28356098779
-1. https://zhuanlan.zhihu.com/p/662089556
-1. https://zhuanlan.zhihu.com/p/22300321859
+## Reference
+
 1. [GPUMode - Lecture 57: CuTe](https://www.youtube.com/watch?v=vzUhbDO_0qk)
+1. [知乎 - 深入分析CUTLASS系列](https://zhuanlan.zhihu.com/p/677616101)
+1. [知乎 - cute 之 Layout](https://www.zhihu.com/people/reed-84-49/posts)
+1. [CUTLASS CUTE笔记](https://www.zhihu.com/people/li-yi-xing-29/posts)
 

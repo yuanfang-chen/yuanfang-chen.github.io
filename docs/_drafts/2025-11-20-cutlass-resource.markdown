@@ -37,26 +37,24 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 - [GTC'25 Enable Tensor Core Programming in Python with CUTLASS 4.0](https://www.nvidia.com/en-us/on-demand/session/gtc25-s74639/)
 
 
-## Official Blogs Related to CUTLASS
+## Official Blog
+- [Feb 2013 - An Efficient Matrix Transpose in CUDA C/C++](https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/)
 - [Oct 2017 - Volta - Programming Tensor Cores in CUDA 9](https://developer.nvidia.com/blog/programming-tensor-cores-cuda-9/)
 - [Dec 2017 - Volta - CUTLASS: Fast Linear Algebra in CUDA C++](https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda/)
+- [Sep 2020 - Controlling Data Movement to Boost Performance on the NVIDIA Ampere Architecture](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/)
+- [Mar 2022 - NVIDIA Hopper Architecture In-Depth](https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/)
 - [July 2024 - Next Generation of FlashAttention](https://developer.nvidia.com/blog/next-generation-of-flashattention/)
 - [July 2025 - CUTLASS 3.x: Orthogonal, Reusable, and Composable Abstractions for GEMM Kernel Design ](https://developer.nvidia.com/blog/cutlass-3-x-orthogonal-reusable-and-composable-abstractions-for-gemm-kernel-design/)
 - [July 2025 -  CUTLASS: Principled Abstractions for Handling Multidimensional Data Through Tensors and Spatial Microkernels](https://developer.nvidia.com/blog/cutlass-principled-abstractions-for-handling-multidimensional-data-through-tensors-and-spatial-microkernels/)
 - [Nov 2025 - Achieve CUTLASS C++ Performance with Python APIs Using CuTe DSL](https://developer.nvidia.com/blog/achieve-cutlass-c-performance-with-python-apis-using-cute-dsl/)
-
-## Official Blogs
-- [Feb 2013 - An Efficient Matrix Transpose in CUDA C/C++](https://developer.nvidia.com/blog/efficient-matrix-transpose-cuda-cc/)
-- [Mar 2022 - NVIDIA Hopper Architecture In-Depth](https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/)
-- [Controlling Data Movement to Boost Performance on the NVIDIA Ampere Architecture](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/)
+- [GPU Performance Background User's Guide](https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html#)
+- [Matrix Multiplication Background User's Guide](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html)
 
 
 ## Non-official Blogs
 - [NVIDIA Tensor Core Evolution: From Volta To Blackwell](https://newsletter.semianalysis.com/p/nvidia-tensor-core-evolution-from-volta-to-blackwell)
 - [All Posts on Colfax](https://research.colfax-intl.com/)
-- [知乎 - 深入分析CUTLASS系列](https://zhuanlan.zhihu.com/p/677616101)
-- [知乎 - cute 之 Layout](https://www.zhihu.com/people/reed-84-49/posts)
-- [CUTLASS CUTE笔记](https://www.zhihu.com/people/li-yi-xing-29/posts)
+- 
 - [How to Optimize a CUDA Matmul Kernel for cuBLAS-like Performance: a Worklog (without using Tensor Core)](https://siboehm.com/articles/22/CUDA-MMM)
 - [Outperforming cuBLAS on H100: a Worklog (using Tensor Core)](https://cudaforfun.substack.com/p/outperforming-cublas-on-h100-a-worklog)
 - [Matrix Multiplication on Blackwell](https://www.modular.com/matrix-multiplication-on-blackwell)

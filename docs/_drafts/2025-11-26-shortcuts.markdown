@@ -6,9 +6,29 @@ categories: random
 typora-root-url: ..
 ---
 
-# [MacOS](https://support.apple.com/en-us/102650)
+## [MacOS](https://support.apple.com/en-us/102650)
 
-## Text-editing shortcuts
+### common shortcuts
+
+-  **Command–Space bar**: Show or hide the [Spotlight](https://support.apple.com/guide/mac-help/mchlp1008/mac) search field. To perform a Spotlight search from a Finder window, press **Option–Command–Space bar**. (In some versions of macOS, if you [use multiple input sources](https://support.apple.com/guide/mac-help/mchlp1406/mac) to type in different languages, these shortcuts change input sources. Learn how to [change a conflicting keyboard shortcut](https://support.apple.com/guide/mac-help/mchlp2864/mac).)
+- **Control–Command–Space bar** or **Fn-E**: Show the Character Viewer, from which you can choose [emoji and other symbols](https://support.apple.com/guide/mac-help/mchlp1560/mac).
+- **Control-Command-F**: Use or stop using the app in full screen, if supported by the app.
+- **Space bar**: Use [Quick Look](https://support.apple.com/guide/mac-help/mh14119/mac) to preview the selected item.
+- **Command-Tab**: Switch to the next most recently used app among your open apps.
+- **Command–Grave accent (`):** Switch between the windows of the app you're using. (The character on the second key varies by keyboard. It's generally the key above the Tab key and to the left of the number 1.)
+- **Command-Comma (,)**: Open settings (preferences) for the front app.
+- **Control-Command-Q**: Lock your screen.
+
+### Finder and system shortcuts
+
+- **Command-F**: Start a Spotlight search in the Finder window.
+- **Command-I**: Show the Get Info window for a selected file.
+- **Option-Command-D**: Show or hide the Dock.
+- **Option–Mission Control**: Open Mission Control settings.
+- **Command–Mission Control** or **Fn-H** o**r Fn-F11** Show the desktop.
+- **Control–Up Arrow**: Open Mission Control.
+
+### Text-editing shortcuts
 
 The behavior of these shortcuts may vary with the app you're using.
 
@@ -91,10 +111,62 @@ xxx
 
 ## [Typora](https://support.typora.io/Shortcut-Keys/)
 
-xxx
+### Edit
+
+| Function                                   | Hotkey (Windows/Linux)     | Hotkey (macOS)                      |
+| :----------------------------------------- | :------------------------- | ----------------------------------- |
+| New Paragraph                              | Enter                      | Enter                               |
+| New Line                                   | Shift + Enter              | Shift + Enter                       |
+| Cut                                        | Ctrl + X                   | Command + X                         |
+| Copy                                       | Ctrl + C                   | Command + C                         |
+| Paste                                      | Ctrl + V                   | Command + V                         |
+| Copy As Markdown                           | Ctrl + Shift + C           | Command + Shift + C                 |
+| Paste As Plain Text                        | Ctrl + Shift + V           | Command + Shift + V                 |
+| Select All                                 | Ctrl + A                   | Command + A                         |
+| Select Line/Sentence Select Row (in table) | Ctrl + L                   | Command + L                         |
+| Delete Row (in table)                      | Ctrl + Shift + Backspace   | Command + Shift + Backspace         |
+| Select Style Scope Select Cell (in table)  | Ctrl + E                   | Command + E                         |
+| Select Word                                | Ctrl + D                   | Command + D                         |
+| Delete Word                                | Ctrl + Shift + D           | Command + Shift + D                 |
+| Jump to Top                                | Ctrl + Home                | Command + ↑                         |
+| Jump to Selection                          | Ctrl + J                   | Command + J                         |
+| Jump to Bottom                             | Ctrl + End                 | Command + ↓                         |
+| Find                                       | Ctrl + F                   | Command + F                         |
+| Find Next                                  | F3 / Enter                 | Command + G / Enter                 |
+| Find Previous                              | Shift + F3 / Shift + Enter | Command + Shift + G / Shift + Enter |
+| Replace                                    | Ctrl + H                   | Command + H                         |
+
+### Paragraph
+
+| Function               | Hotkey (Windows/Linux) | Hotkey (macOS)            |
+| :--------------------- | :--------------------- | ------------------------- |
+| Heading 1 to 6         | Ctrl + 1/2/3/4/5/6     | Command + 1/2/3/4/5/6     |
+| Paragraph              | Ctrl + 0               | Command + 0               |
+| Increase Heading Level | Ctrl + =               | Command + =               |
+| Decrease Heading Level | Ctrl + -               | Command + -               |
+| Table                  | Ctrl + T               | Command + Option + T      |
+| Code Fences            | Ctrl + Shift + K       | Command + Option + C      |
+| Math Block             | Ctrl + Shift + M       | Command + Option + B      |
+| Quote                  | Ctrl + Shift + Q       | Command + Option + Q      |
+| Ordered List           | Ctrl + Shift + [       | Command + Option + O      |
+| Unordered List         | Ctrl + Shift + ]       | Command + Option + U      |
+| Indent                 | Ctrl + [ / Tab         | Command + [ / Tab         |
+| Outdent                | Ctrl + ] / Shift + Tab | Command + ] / Shift + Tab |
+
+### Format
+
+| Function     | Hotkey (Windows/Linux) | Hotkey (macOS)        |
+| :----------- | :--------------------- | --------------------- |
+| Strong       | Ctrl + B               | Command + B           |
+| Emphasis     | Ctrl + I               | Command + I           |
+| Underline    | Ctrl + U               | Command + U           |
+| Code         | Ctrl + Shift + `       | Control + `           |
+| Strike       | Alt + Shift + 5        | Control + Shift + `   |
+| Hyperlink    | Ctrl + K               | Command + K           |
+| Image        | Ctrl + Shift + I       | Command + Control + I |
+| Clear Format | Ctrl + \               | Command + \           |
 
 ## Clash Pro
 
 xxx
-
 

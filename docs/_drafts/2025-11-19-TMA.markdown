@@ -21,6 +21,14 @@ In historical context, these developments continue a trend of replacing general-
 
 算存比，提高内存带宽利用率，需要用到异步来overlap计算和拷贝
 
+## [Volta](https://developer.nvidia.com/blog/cutlass-linear-algebra-cuda/#software_pipelining)/[Ampere](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/) Software Pipelining
+
+在Volta/Ampere架构上，Tensor Core还是依赖RMEM完成MMA指令（fragments, accumulators）。这样会带来寄存器压力，从而限制了occupancy。因此包含GEMM运算的kernel比不包含GEMM的kernel所能launch的warp要少很多，无法做到很好的warp之间的计算/拷贝遮掩。因此我们需要依赖软流水（software pipelining）来实现计算/拷贝的遮掩。Volta和Ampere的软流水都用下图的方式实现，区别在于在Volta上没有异步拷贝支持，需要更多依赖编译器的指令调度来实现遮掩；而在Ampere上，可以直接用异步拷贝实现遮掩。
+
+![Figure 8. Three concurrent streams of instructions interleaved in the main loop of CUTLASS’s GEMM implementation. The orange arrows show data dependencies. While the memory system is loading data from global memory and the SM is loading fragments for the next thread tile, threads keep the SM busy by executing math instructions for the current tile.](https://developer.nvidia.com/blog/parallelforall/wp-content/uploads/2017/12/fig-10-software-pipeline-1.png)
+
+[How does the LSU (Load/Store Unit) execute Load/Store instructions in the Ampere architecture?](https://forums.developer.nvidia.com/t/how-does-the-lsu-load-store-unit-execute-load-store-instructions-in-the-ampere-architecture/273699)
+
 ## Asynchrony
 
 
@@ -49,6 +57,43 @@ With warp-specialization, some warps are dedicated to memory fetches (producers)
   [Part 3] will discuss persistent kernels and Stream-K, a load-balancing strategy for GEMM that achieves state-of-the-art efficiency across a vast number of problem geometries.
   https://research.colfax-intl.com/cutlass-tutorial-persistent-kernels-and-stream-k/
 
+### [PTX setmaxnreg](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#miscellaneous-instructions-setmaxnreg) (Hopper & Blackwell)
+
+正常情况下，编译器需要静态决定算子用的寄存器数量，这样会强制给producer和consumer分配同样数量的寄存器。但问题是producer一般是用TMA搬运数据，很少用到寄存器，但却被迫要和consumer用同样数量的寄存器。显然，这样会造成寄存器的浪费，因此在Hopper上，setmaxnreg指令可以在运行时让warp之间重新分配寄存器。用setmaxnreg指令把producer的寄存器转给consumer用，这样可以提高资源使用率。
+
+```cpp
+// Example values for Hopper GEMM with 1 consumer warpgroup
+using LowerRegisterCount = Int<40>;
+using HigherRegisterCount = Int<256>;
+ 
+if (warp_group_idx == producerWarpGroupId) {
+  cutlass::arch::warpgroup_reg_dealloc<LowerRegisterCount{}>();   // <============= dealloc from producer
+  int lane_predicate = cute::elect_one_sync();
+  if (warp_idx_in_warpgroup == 0 && lane_predicate) {
+    PipelineState smem_pipe_write = 
+      cutlass::make_producer_start_state<MainloopPipeline>();
+    for (...) {
+      pipeline.producer_acquire(smem_pipe_write);
+      copy(...); // TMA
+      ++smem_pipe_write;
+    }
+  }
+} else { // consumer warpgroup
+  cutlass::arch::warpgroup_reg_alloc<HigherRegisterCount{}>();   // <============= alloc to consumer
+  PipelineState smem_pipe_read;
+  for (...) {
+    pipeline.consumer_wait(smem_pipe_read);
+    gemm(...); // WGMMA
+    pipeline.consumer_release(smem_pipe_read);
+    ++smem_pipe_read;
+  }
+  // Epilogue to write out accumulator
+  axpby(...);
+}
+```
+
+
+
 
 ### Hopper Warp Specialization
 There are two pipelining strategies that are effective on the Hopper architecture:
@@ -72,7 +117,12 @@ To mitigate the effects of memory latency, CUTLASS uses software pipelining to o
 - **Warp-scoped matrix fragments**: two fragments are allocated within registers. One fragment is passed to CUDA and TensorCores during the current matrix computation, while the other is used to receive shared memory fetch returns for the next warp-level matrix operation.
 
 The following diagram illustrates the efficient, pipelined mainloop body used in CUTLASS GEMMs.
+
+
+<!--
 ![alt text](assets/images/cutlass-mainloop.png)
+-->
+
 
 ### cuda::pipeline
 CUDA provides the cuda::pipeline synchronization object to manage and overlap asynchronous data movement with computation.
@@ -201,7 +251,7 @@ https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#proxies
 
 ## [Multicast Support](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#multicast-support)
 
-
+## [Epilogue Visitor Tree](https://dl.acm.org/doi/10.1145/3620666.3651369)
 
 ## References
 PTX: https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-asynchronous-copy

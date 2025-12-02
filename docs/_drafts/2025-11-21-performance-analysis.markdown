@@ -4,9 +4,38 @@ title:  "CUDA Performance Analysis"
 # date:   2025-11-21 11:18:26 -0800
 categories: CUDA
 typora-root-url: ..
+mathjax: true
 ---
 
-## XX
+## 定律
+
+### Amdahl's law
+
+- 该定律由 Gene Amdahl 提出，用于预测并行计算的理论最大加速比。
+- **假设：问题大小不变，增加计算资源**
+- 它指出，程序的加速比受到其**串行部分**所占比例的限制。即使可以无限增加并行处理器的数量，串行部分的处理时间也无法缩短，从而限制了整体性能的提升。
+
+### Gustafson's law
+
+- 作为对 Amdahl 定律的补充，该定律由 John Gustafson 和 Edwin Barsis 提出。
+- **假设：随着计算资源的增加，问题尺寸会变大**
+- 它关注随着问题规模（而非固定的工作负载）的增大，并行计算的性能提升。它假设当处理器数量增加时，工作负载的总大小也会按比例增加，这更贴合实际应用中处理更大、更复杂问题的场景。
+
+### Little's law
+
+- 虽然 Little 定律最初源于排队论，但它在并行和分布式系统中被广泛应用。
+
+- 它描述了在一个稳定的系统中，平均客户数量（\\(L\\)）等于客户的平均到达率（\\(\lambda\\)）乘以客户在系统中花费的平均时间（\\(W\\)），即\\(L=\lambda W\\)。在计算领域，它有助于分析系统吞吐量、延迟和并行度之间的关系。
+
+### scaling law
+
+- strong scaling
+- weak scaling
+
+### huang’s law
+
+## The Big Picture
+
 The big picture: “Feeding the beast”
 There are 2 main actions in a GEMM kernel: copying the numbers to the correct memory addresses, and multiply-accumulating them. The former action is handled by copy instructions: TMA in Hopper, cp.async in Ampere, and vanilla copy in earlier architectures. The latter action, since the Volta architecture in 2017, has become the exclusive business of the tensor cores.
 
@@ -14,9 +43,97 @@ Through many generations, the tensor cores have become a beast at consuming the 
 
 In general, there are two overarching strategies to “feed the beast,” which are complementary and function at different scopes (grid vs. block). 
 
-- The first strategy is effective threadblock scheduling, which entails distributing the computation among the CTAs to obtain good load balancing and a higher rate of L2 cache hits. We will discuss this in a later blog post, but for now, we refer curious readers to the techniques of threadblock rasterization and persistent kernels, for instance as implemented in CUTLASS. 
-- The second strategy, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
+- **The first strategy** is effective threadblock scheduling, which entails distributing the computation among the CTAs to obtain good load balancing and a higher rate of L2 cache hits. We will discuss this in a later blog post, but for now, we refer curious readers to the techniques of threadblock rasterization and persistent kernels, for instance as implemented in CUTLASS. 
+- **The second strategy**, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
 
 https://developer.nvidia.com/blog/accelerating-hpc-applications-with-nsight-compute-roofline-analysis/
 
 
+
+https://zhuanlan.zhihu.com/p/687176254
+
+https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html
+
+
+
+### [Quantization](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization)
+
+#### Wave Quantization
+
+An NVIDIA GPU consists of a number of streaming multiprocessors (SMs): each SM has its own shared memory, register file, Tensor Cores, etc., and they operate independently from each other. An ideal workload takes maximal advantage of parallelism between the SMs by evenly distributing work among the SMs, so that all SMs are kept busy for the entire duration of the kernel. However, if some SMs complete their portion quicker than others, then they will sit idle waiting for the rest of the SMs to complete. This is an example of **load imbalance**.
+
+Consider a computation that is divisible into equally-sized **work units**, where each work unit can be completed by a single SM in the same amount of time. For example, GEMM is generally partitioned into work units that each compute a single bM x bN output tile. These work units are then assigned to threadblocks (CTAs), and each CTA computes its assigned work unit on an available SM. We will call the assignment of work units to SMs **scheduling**.
+
+If the number of work units exceeds the number of available SMs, then the work units will be processed in multiple **waves**, where 1 wave is the completion of a single work unit by every available SM.
+
+**Wave quantization** then arises when the number of work units isn’t evenly divisible by the number of available SMs. For example, consider a case where there are 10 work units, and 4 SMs. Then the work unit execution timeline looks like:
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/quantization.png?resize=590%2C540&ssl=1)
+
+The impact of wave quantization decreases as the number of waves increases (AKA. as the number of threadblocks increase). However, increasing the number of waves can be difficult, especially considering that the number of SMs on NVIDIA GPUs continues to grow with newer architectures. So it is important that we come up with strategies to mitigate the impact of wave quantization without making assumptions on the problem size.
+
+**解决wave quantization的方案一：增加更多的Work unit**
+
+增加更多work unit的方式之一是把bN减半。**缺点是这样会降低[arithmetic intensity](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#math-mem)**，从而导致受益不够。
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/split-mn-more-tiles.png?resize=2053%2C1243&ssl=1)
+
+**解决wave quantization的方案二：stream-k**
+
+[Our code sample on GitHub](https://github.com/ColfaxResearch/cfx-article-src/tree/master/streamk) provides three examples of schedulers: a trivial non-persistent scheduler that assigns 1 worktile to each CTA over a grid determined by the problem shape; a data-parallel persistent scheduler; and a Stream-K hybrid scheduler which incorporates a some but not all of CUTLASS’s optimizations. In practice, we found that many of CUTLASS’s optimizations were necessary to get reasonable performance: notably, the additional GMEM accesses and smaller tile sizes caused by reduction are a real cost, and the boundaries of Stream-K work assignments need to be carefully tweaked to minimize this cost.
+
+
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/m1024-no-heuristic.png?resize=720%2C540&ssl=1)
+
+The vertical dotted lines denote the wave boundaries. As expected, there is a sharp drop in performance for the DataParallel mode when going over wave boundaries. This is the wave quantization effect. The DataParallel mode matches or outperforms all other modes when the last wave is mostly full (tiles-per-SM is just under a whole integer), and underperforms when it is nearly empty (tiles-per-SM is just over a whole integer). Finally, we can see that the wave quantization effect is the most pronounced when the total number of waves is low.
+
+
+
+## Optimizations
+
+### Pipelining
+
+#### Warp-specialization
+Specializing warps into producers (data transfer) and consumers (compute), and having them run concurrently.
+
+#### Multistage
+
+Masking data transfer by using asynchronous copy (TMA on Hopper or `cp.async` on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
+
+![img](https://i0.wp.com/github.com/NVIDIA/cutlass/raw/main/media/images/software-pipeline.png?ssl=1)
+
+### Threadblock Rasterization
+
+### Parallelized Reductions
+
+#### split-k
+
+#### stream-k
+
+#### persistent kernel
+
+
+
+https://docs.nvidia.com/cutlass/media/docs/cpp/grouped_scheduler.html
+Preferred Thread Block Clusters
+Dependent kernel launches
+
+## NCCL
+
+
+
+## References
+
+- [NVIDIA Deep Learning Performance](https://docs.nvidia.com/deeplearning/performance/index.html)
+- [GPU Glossary - Performance](https://modal.com/gpu-glossary/perf)
+- [Roofline: an insightful visual performance model for multicore architectures](https://people.eecs.berkeley.edu/~kubitron/cs252/handouts/papers/RooflineVyNoYellow.pdf)
+- [Quantitative System Performance](https://homes.cs.washington.edu/~lazowska/qsp/)
+- https://jax-ml.github.io/scaling-book/
+- [Latency Numbers Every Programmer Should Know](https://colin-scott.github.io/personal_website/research/interactive_latency.html)
+- [Building Machine Learning Systems for a Trillion Trillion Floating Point Operations](https://www.youtube.com/watch?v=139UPjoq7Kw&t=1229s)
+- [Strangely, Matrix Multiplications on GPUs Run Faster When Given "Predictable" Data! [short]](https://www.thonking.ai/p/strangely-matrix-multiplications)
+- [CUDA C++ Best Practices Guide](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide)
+- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72685/
+- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72686/
+- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72683/
