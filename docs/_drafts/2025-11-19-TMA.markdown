@@ -46,6 +46,25 @@ A standard GPU program executes the same logic on each warp, while a warp specia
 
 With warp-specialization, some warps are dedicated to memory fetches (producers), while others are dedicated to compute (consumers), and named barriers are used for synchronization between them. The idea is that the warp schedulers can then more easily hide the latency of copy operations within compute (and vice-versa).
 
+```cpp
+if warpid() == LOAD:
+  for i, tile in enumerate(tiles):
+    if i > 0:
+      wait_for_tile_release()
+    async_tma_load(tile)
+    wait_for_tma_load()
+    signal_tile_loaded()
+else:
+  for tile in enumerate(tiles):
+    wait_for_tile_loaded()
+    tile_data = get_loaded_tile(tile)
+    async_mma(tile_data)
+    wait_for_async_mma()
+    signal_tile_released()
+```
+
+![GEMM Pipeline](https://rohany.github.io/blog/warp-specialization/gemm-pipe.png)
+
 - [Independent Thread Scheduling](https://docs.nvidia.com/cuda/cuda-c-programming-guide/#independent-thread-scheduling)
 - https://rohany.github.io/blog/warp-specialization/
 - [Enabling advanced GPU features in PyTorch – Warp Specialization](https://pytorch.org/blog/warp-specialization/)

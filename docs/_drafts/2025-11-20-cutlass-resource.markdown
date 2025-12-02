@@ -54,7 +54,6 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 ## Non-official Blogs
 - [NVIDIA Tensor Core Evolution: From Volta To Blackwell](https://newsletter.semianalysis.com/p/nvidia-tensor-core-evolution-from-volta-to-blackwell)
 - [All Posts on Colfax](https://research.colfax-intl.com/)
-- 
 - [How to Optimize a CUDA Matmul Kernel for cuBLAS-like Performance: a Worklog (without using Tensor Core)](https://siboehm.com/articles/22/CUDA-MMM)
 - [Outperforming cuBLAS on H100: a Worklog (using Tensor Core)](https://cudaforfun.substack.com/p/outperforming-cublas-on-h100-a-worklog)
 - [Matrix Multiplication on Blackwell](https://www.modular.com/matrix-multiplication-on-blackwell)
@@ -68,3 +67,14 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 ## Deep Learning Concepts
 - [Deep Learning in a Nutshell: Core Concepts](https://developer.nvidia.com/blog/deep-learning-nutshell-core-concepts/)
 - [Understanding Convolution in Deep Learning](https://timdettmers.com/2015/03/26/convolution-deep-learning/)
+
+
+
+## TODO
+
+- [eveloping CUDA Kernels to Push Tensor Cores to the Absolute Limit on NVIDIA A100.](https://www.nvidia.com/en-us/gtc) (SR 21745)
+- [CUTLASS: Fast Linear Algebra in CUDA C++](https://devblogs.nvidia.com/cutlass-linear-algebra-cuda/)
+- [CUTLASS: SOFTWARE PRIMITIVES FOR DENSE LINEAR ALGEBRA AT ALL LEVELS AND SCALES WITHIN CUDA](https://on-demand-gtc.gputechconf.com/gtcnew/sessionview.php?sessionName=s8854-cutlass%3a+software+primitives+for+dense+linear+algebra+at+all+levels+and+scales+within+cuda)
+- [Programming Tensor Cores: NATIVE VOLTA TENSOR CORES WITH CUTLASS](https://developer.download.nvidia.com/video/gputechconf/gtc/2019/presentation/s9593-cutensor-high-performance-tensor-operations-in-cuda-v2.pdf)
+- [CUDA Programming Guide: warp matrix functions](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#wmma)
+- [Matrix Multiply Accumulate Instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-instructions-mma)

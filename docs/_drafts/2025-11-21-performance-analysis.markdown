@@ -27,7 +27,7 @@ mathjax: true
 
 - 它描述了在一个稳定的系统中，平均客户数量（\\(L\\)）等于客户的平均到达率（\\(\lambda\\)）乘以客户在系统中花费的平均时间（\\(W\\)），即\\(L=\lambda W\\)。在计算领域，它有助于分析系统吞吐量、延迟和并行度之间的关系。
 
-### scaling law
+### Scaling law
 
 - strong scaling
 - weak scaling
@@ -45,16 +45,6 @@ In general, there are two overarching strategies to “feed the beast,” which 
 
 - **The first strategy** is effective threadblock scheduling, which entails distributing the computation among the CTAs to obtain good load balancing and a higher rate of L2 cache hits. We will discuss this in a later blog post, but for now, we refer curious readers to the techniques of threadblock rasterization and persistent kernels, for instance as implemented in CUTLASS. 
 - **The second strategy**, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
-
-https://developer.nvidia.com/blog/accelerating-hpc-applications-with-nsight-compute-roofline-analysis/
-
-
-
-https://zhuanlan.zhihu.com/p/687176254
-
-https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html
-
-
 
 ### [Quantization](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization)
 
@@ -97,27 +87,111 @@ The vertical dotted lines denote the wave boundaries. As expected, there is a sh
 #### Warp-specialization
 Specializing warps into producers (data transfer) and consumers (compute), and having them run concurrently.
 
+Warp Specialization is introduced in Hopper.
+
+A standard GPU program executes the same logic on each warp, while a warp specialized program uses different warps to execute different components of the overall program. Let’s take a look at some of these warp specialization strategies in the aforementioned contexts.
+
+在一个warp内，warp divergence
+
+- **[CUDA-DMA](https://lightsighter.org/pdfs/cudadma-sc11.pdf)**: separated the warps into memory loading (GMEM->SMEM) warps and compute warps; the loader warps issue loads and signal the compute warps when the loaded data is available.
+- **[Singe compiler](https://cs.stanford.edu/~sjt/pubs/ppopp14.pdf)**: 
+- **CUDA Tensor Core**: Specialized warps are used on Hopper and Blackwell to issue either TMA copies or Tensor Core matrix-multiplies. The TMA warp issue copies and notifies the Tensor Core warps when data is ready to be multiplied, and the Tensor Core warps notify the TMA warp when data has been consumed and the memory is free to use for more copies.
+- **[high performance Flash Attention implementation on Blackwell](https://github.com/NVIDIA/cutlass/tree/a49a78ffefc86a87160dfe0ccc3a3a2d1622c918/examples/77_blackwell_fmha)**: uses at least 5 different kinds of specialized warps! In this Flash Attention implementation, there are warps for loading data, issuing matrix multiplication, computing softmax, scaling intermediate results, and storing data. As a result, the code is complex; the strategy itself is carefully constructed to yield high performance, and there is abundant cross-warp data movement and synchronization. Imagine the code above with 5 different warp cases and each cases signaling the others to proceed at different times! (多级流水：类似Asend NPU；有点像CPU流水线了？？)
+
+With warp-specialization, some warps are dedicated to memory fetches (producers), while others are dedicated to compute (consumers), and named barriers are used for synchronization between them. The idea is that the warp schedulers can then more easily hide the latency of copy operations within compute (and vice-versa).
+
+```cpp
+if warpid() == LOAD:
+  for i, tile in enumerate(tiles):
+    if i > 0:
+      wait_for_tile_release()
+    async_tma_load(tile)
+    wait_for_tma_load()
+    signal_tile_loaded()
+else:
+  for tile in enumerate(tiles):
+    wait_for_tile_loaded()
+    tile_data = get_loaded_tile(tile)
+    async_mma(tile_data)
+    wait_for_async_mma()
+    signal_tile_released()
+```
+
+![Figure 2: An overview of the Ping-Pong Kernel pipeline. Time moves left to right.](https://pytorch.org/wp-content/uploads/2024/11/image-9.png)
+
+![Figure 3: An overview of the full async pipeline for Ping-Pong](https://pytorch.org/wp-content/uploads/2024/11/image-5.png)
+
+![img](https://picx.zhimg.com/v2-8633e0b9f54f88a1a4eb7053c463980f_r.jpg)
+
 #### Multistage
 
 Masking data transfer by using asynchronous copy (TMA on Hopper or `cp.async` on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
 
 ![img](https://i0.wp.com/github.com/NVIDIA/cutlass/raw/main/media/images/software-pipeline.png?ssl=1)
 
-### Threadblock Rasterization
+### Threadblock Rasterization (6 SMs)
+
+An advantage of persistent kernels independent of the wave quantization issue is the ability to choose the order in which worktiles are launched. 
+
+**Rasterization along M**
+
+![rasterization along M](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/rasterization-2.png?resize=503%2C540&ssl=1)
+
+**Rasterization along M&N**
+
+Left; rasterization along M with swizzle 2. Right; rasterization along M with swizzle 1.
+
+<img src="https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/swizzle-2.png?resize=960%2C506&ssl=1" alt="img" style="zoom: 67%;" />
+
+
 
 ### Parallelized Reductions
 
+#### sliced-k
+
+![img](https://picx.zhimg.com/v2-c7adbe37ee93405af0c0917fafcd87b5_1440w.jpg)
+
 #### split-k
 
-#### stream-k
+sliced-k could only boost throughput of single SM
 
-#### persistent kernel
+#### ![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/split-k.png?resize=2006%2C1227&ssl=1)stream-k
+
+split-k needs synchronization and reduction
 
 
 
-https://docs.nvidia.com/cutlass/media/docs/cpp/grouped_scheduler.html
-Preferred Thread Block Clusters
-Dependent kernel launches
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/stream-k.png?resize=1768%2C1104&ssl=1)
+
+#### Hybrid Stream-K
+
+naive stream-k is bad for cache
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/hybrid.png?resize=1906%2C1202&ssl=1)
+
+
+
+## [Grouped Kernel Schedulers](https://docs.nvidia.com/cutlass/media/docs/cpp/grouped_scheduler.html)
+
+CUTLASS’s grouped kernel is a persistent kernel which launches multiple problems (e.g., GEMMs, SYR2Ks) within a single CUDA kernel launch.
+
+
+
+## Preferred Thread Block Clusters
+
+- cudaLaunchAttributePreferredClusterDimension = 11
+
+  Valid for graph nodes and launches. Set [cudaLaunchAttributeValue::preferredClusterDim](https://docs.nvidia.com/cuda/cuda-runtime-api/unioncudaLaunchAttributeValue.html#unioncudaLaunchAttributeValue_1bf53f6cb9ba3e18833d99c51a2568df5) to allow the kernel launch to specify a preferred substitute cluster dimension. Blocks may be grouped according to either the dimensions specified with this attribute (grouped into a "preferred substitute cluster"), or the one specified with [cudaLaunchAttributeClusterDimension](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1ggfc5ed48085f05863b1aeebb14934b0563de2ec80489ee6a8010335db69abc3ff) attribute (grouped into a "regular cluster"). The cluster dimensions of a "preferred substitute cluster" shall be an integer multiple greater than zero of the regular cluster dimensions. The device will attempt - on a best-effort basis - to group thread blocks into preferred clusters over grouping them into regular clusters. When it deems necessary (primarily when the device temporarily runs out of physical resources to launch the larger preferred clusters), the device may switch to launch the regular clusters instead to attempt to utilize as much of the physical device resources as possible. Each type of cluster will have its enumeration / coordinate setup as if the grid consists solely of its type of cluster. For example, if the preferred substitute cluster dimensions double the regular cluster dimensions, there might be simultaneously a regular cluster indexed at (1,0,0), and a preferred cluster indexed at (1,0,0). In this example, the preferred substitute cluster (1,0,0) replaces regular clusters (2,0,0) and (3,0,0) and groups their blocks. This attribute will only take effect when a regular cluster dimension has been specified. The preferred substitute cluster dimension must be an integer multiple greater than zero of the regular cluster dimension and must divide the grid. It must also be no more than `maxBlocksPerCluster`, if it is set in the kernel's `__launch_bounds__`. Otherwise it must be less than the maximum value the driver can support. Otherwise, setting this attribute to a value physically unable to fit on any particular device is permitted.
+
+![img](https://pic1.zhimg.com/v2-e0e5e0946fe8709bd777464df7e948d8_1440w.jpg)
+
+## [Dependent kernel launches](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#programmatic-dependent-launch-and-synchronization)
+
+The *Programmatic Dependent Launch* mechanism allows for a dependent *secondary* kernel to launch before the *primary* kernel it depends on in the same CUDA stream has finished executing. Available starting with devices of compute capability 9.0, this technique can provide performance benefits when the *secondary* kernel can complete significant work that does not depend on the results of the *primary* kernel.
+
+![GPU activity timeline](https://docs.nvidia.com/cuda/cuda-c-programming-guide/_images/gpu-activity.png)
+
+![Concurrent execution of ``primary_kernel`` and ``secondary_kernel``](https://docs.nvidia.com/cuda/cuda-c-programming-guide/_images/preamble-overlap.png)
 
 ## NCCL
 
@@ -126,14 +200,39 @@ Dependent kernel launches
 ## References
 
 - [NVIDIA Deep Learning Performance](https://docs.nvidia.com/deeplearning/performance/index.html)
+
 - [GPU Glossary - Performance](https://modal.com/gpu-glossary/perf)
+
 - [Roofline: an insightful visual performance model for multicore architectures](https://people.eecs.berkeley.edu/~kubitron/cs252/handouts/papers/RooflineVyNoYellow.pdf)
+
 - [Quantitative System Performance](https://homes.cs.washington.edu/~lazowska/qsp/)
-- https://jax-ml.github.io/scaling-book/
+
+- [How to Scale Your Model](https://jax-ml.github.io/scaling-book/)
+
 - [Latency Numbers Every Programmer Should Know](https://colin-scott.github.io/personal_website/research/interactive_latency.html)
+
 - [Building Machine Learning Systems for a Trillion Trillion Floating Point Operations](https://www.youtube.com/watch?v=139UPjoq7Kw&t=1229s)
+
 - [Strangely, Matrix Multiplications on GPUs Run Faster When Given "Predictable" Data! [short]](https://www.thonking.ai/p/strangely-matrix-multiplications)
+
 - [CUDA C++ Best Practices Guide](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide)
-- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72685/
-- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72686/
-- https://www.nvidia.com/en-us/on-demand/session/gtc25-s72683/
+
+- [Deep Dive on CUTLASS Ping-Pong GEMM Kernel](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/)
+
+- [Accelerating HPC Applications with NVIDIA Nsight Compute Roofline Analysis](https://developer.nvidia.com/blog/accelerating-hpc-applications-with-nsight-compute-roofline-analysis/)
+
+- [Techniques for training large neural networks](https://openai.com/index/techniques-for-training-large-neural-networks/)
+
+- [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed)
+
+- [S72683 - CUDA Techniques to Maximize Memory Bandwidth and Hide Latency](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72683/)
+
+- [S72685 - CUDA Techniques to Maximize Compute and Instruction Throughput](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72685/)
+
+- [S72686 - CUDA Techniques to Maximize Concurrency and System Utilization](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72686/)
+
+- [S51413 - Developing Optimal CUDA Kernels on Hopper Tensor Cores](https://www.nvidia.com/en-us/on-demand/session/gtcspring23-s51413/)
+
+- [S61198 - CUTLASS: A Performant, Flexible, and Portable Way to Target Hopper Tensor Cores](https://www.nvidia.com/en-us/on-demand/session/gtc24-s61198/)
+
+  
