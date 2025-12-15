@@ -197,6 +197,84 @@ The *Programmatic Dependent Launch* mechanism allows for a dependent *secondary*
 
 
 
+## 优化手段
+
+### [vectorized load/store](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
+
+SASS中`LDG.E` and `STG.E` 指令从GMEM load and store 32 bits数据，不是vectorized load/store.
+
+`LDG.E.{64,128}` and `STG.E.{64,128}`. 指令从GMEM load and store 64/128 bits数据，是vectorized load/store
+
+这个例子没有用到vectorized load/store
+
+```c++
+__global__ void device_copy_scalar_kernel(int* d_in, int* d_out, int N) { 
+  int idx = blockIdx.x * blockDim.x + threadIdx.x; 
+  for (int i = idx; i < N; i += blockDim.x * gridDim.x) { 
+    // 先从GMEM load到RMEM，再从RMEM store到GMEM
+    d_out[i] = d_in[i];  // <<=== LDG.E R3, desc[UR6][R2.64] ; STG.E desc[UR6][R4.64], R3 ; 
+  } 
+} 
+ 
+void device_copy_scalar(int* d_in, int* d_out, int N) 
+{ 
+  int threads = 256; 
+  int blocks = min((N + threads-1) / threads, MAX_BLOCKS);  
+  device_copy_scalar_kernel<<<blocks, threads>>>(d_in, d_out, N); 
+}
+```
+
+这个例子用到了vectorized load/store: `LDG.E.64` and `STG.E.64`.
+
+```c++
+__global__ void device_copy_vector2_kernel(int* d_in, int* d_out, int N) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  for (int i = idx; i < N/2; i += blockDim.x * gridDim.x) {
+    reinterpret_cast<int2*>(d_out)[i] = reinterpret_cast<int2*>(d_in)[i];
+  }
+ 
+  // in only one thread, process final element (if there is one)
+  if (idx==N/2 && N%2==1)
+    d_out[N-1] = d_in[N-1];
+}
+ 
+void device_copy_vector2(int* d_in, int* d_out, int n) {
+  threads = 256; 
+  blocks = min((N/2 + threads-1) / threads, MAX_BLOCKS); 
+ 
+  device_copy_vector2_kernel<<<blocks, threads>>>(d_in, d_out, N);
+}
+```
+
+这个例子用到了vectorized load/store: `LDG.E.128` and `STG.E.128`.
+
+```c++
+__global__ void device_copy_vector4_kernel(int* d_in, int* d_out, int N) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  for(int i = idx; i < N/4; i += blockDim.x * gridDim.x) {
+    reinterpret_cast<int4*>(d_out)[i] = reinterpret_cast<int4*>(d_in)[i];
+  }
+ 
+  // in only one thread, process final elements (if there are any)
+  int remainder = N%4;
+  if (idx==N/4 && remainder!=0) {
+    while(remainder) {
+      int idx = N - remainder--;
+      d_out[idx] = d_in[idx];
+    }
+  }
+}
+ 
+void device_copy_vector4(int* d_in, int* d_out, int N) {
+  int threads = 256;
+  int blocks = min((N/4 + threads-1) / threads, MAX_BLOCKS);
+ 
+  device_copy_vector4_kernel<<<blocks, threads>>>(d_in, d_out, N);
+}
+```
+
+
+
 ## References
 
 - [NVIDIA Deep Learning Performance](https://docs.nvidia.com/deeplearning/performance/index.html)
@@ -224,6 +302,10 @@ The *Programmatic Dependent Launch* mechanism allows for a dependent *secondary*
 - [Techniques for training large neural networks](https://openai.com/index/techniques-for-training-large-neural-networks/)
 
 - [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed)
+
+- [Optimization Techniques for GPU Programming](https://dl.acm.org/doi/10.1145/3570638)
+
+- [CUDA Pro Tip: Increase Performance with Vectorized Memory Access](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
 
 - [S72683 - CUDA Techniques to Maximize Memory Bandwidth and Hide Latency](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72683/)
 

@@ -28,7 +28,14 @@ typora-root-url: ..
 - **Command–Mission Control** or **Fn-H** o**r Fn-F11** Show the desktop.
 - **Control–Up Arrow**: Open Mission Control.
 
-### Text-editing shortcuts
+### Text-editing shortcuts (frequently used)
+
+- **Option–Shift–Up Arrow**: Extend text selection to the beginning of the current paragraph, then to the beginning of the following paragraph if pressed again.
+- **Option–Shift–Down Arrow**: Extend text selection to the end of the current paragraph, then to the end of the following paragraph if pressed again.
+- **Option–Shift–Left Arrow**: Extend text selection to the beginning of the current word, then to the beginning of the following word if pressed again.
+- **Option–Shift–Right Arrow**: Extend text selection to the end of the current word, then to the end of the following word if pressed again.
+
+### Text-editing shortcuts (all)
 
 The behavior of these shortcuts may vary with the app you're using.
 
@@ -79,7 +86,7 @@ The behavior of these shortcuts may vary with the app you're using.
 - **Control-T**: Swap the character behind the insertion point with the character in front of the insertion point.
 - **Command–Left Curly Bracket ({)**: Left align.
 - **Command–Right Curly Bracket (})**: Right align.
-- **Shift–Command–Vertical bar (|)**: Center align.
+- **Shift–Command–Vertical bar (\|)**: Center align.
 - **Option-Command-F**: Go to the search field.
 - **Option-Command-T**: Show or hide a toolbar in the app.
 - **Option-Command-C**: Copy Style: Copy the formatting settings of the selected item to the Clipboard.

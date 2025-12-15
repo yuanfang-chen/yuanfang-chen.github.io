@@ -46,3 +46,76 @@ As you can see, the CUTLASS Heuristic mode does a very good job predicting the b
 
 //   These are the A and B fragments of the tcgen05.mma in CuTe terminology.
 
+
+
+## 硬件架构建议
+
+https://old.hotchips.org/wp-content/uploads/hc_archives/hc29/HC29.21-Monday-Pub/HC29.21.10-GPU-Gaming-Pub/HC29.21.132-Volta-Choquette-NVIDIA-Final3.pdf
+
+
+
+![image-20251208201156943](/assets/images/image-20251208201156943.png)
+
+![image-20251208201444420](/assets/images/image-20251208201444420.png)
+
+- Trade TLP for ILP because ILP is what make CPU world is good at.
+- "ILP + massive parallism"  means synchronization needs to be fast.
+
+
+
+* use TN layout MMA https://leimao.github.io/blog/NVIDIA-Tensor-Core-MMA-Instruction-TN-Layout/
+
+
+
+
+
+## 编程架构
+
+第一层：cutlass/catlass cute
+第二层：cuBLASDx
+第三层：cuBLASLt
+第四层：cuTile
+
+跨平台编程框架如Triton、TileLang也要支持，但不如原生的重要
+
+
+
+## cuBLAS
+
+Matmul API 优化细节过多，类似imperative programming
+
+cublaslt是declarative programming，有一定的kernel fusion能力
+cublasdx可以完全定制kernel fusion
+
+
+
+建议Matmul API拆分成cublaslt和cublasdx
+
+
+
+
+
+
+cublaslt的 input/output 是都在host
+    checkCublasStatus(cublasLtMatmul(ltHandle,
+                                     operationDesc,
+                                     alpha,
+                                     A,
+                                     Adesc,
+                                     B,
+                                     Bdesc,
+                                     beta,
+                                     C,
+                                     Cdesc,
+                                     C,
+                                     Cdesc,
+                                     &heuristicResult.algo,
+                                     workspace,
+                                     workspaceSize,
+                                     0));
+
+
+"模板参数MatmulCallBackFunc支持用户定制化Matmul的A矩阵、B矩阵及C矩阵的搬入搬出功能，如非连续搬入或针对搬出设置不同的数据片段间隔等。"
+这个能力cute Layout可以解决
+
+https://chatgpt.com/s/t_6902394f732481918af7f92f3b0a25da    Why cuBLASLt omits fill mode

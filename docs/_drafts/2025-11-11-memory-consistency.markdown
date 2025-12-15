@@ -6,18 +6,69 @@ categories: CUDA
 typora-root-url: ..
 ---
 
+## [PTX `mbarrier`](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-mbarrier)
+
+## [PTX `membar`/`fence`](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-membar)
+
+## [PTX atom](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-atom)
 
 
-We explain these points in order. First, a `wgmma.fence` instruction ensures that `wgmma.mma_async` only accesses certain RMEM addresses after all prior accesses to such addresses have finished. Without the `wgmma.fence`, the behavior is undefined. An exception to this rule is that Hopper allows *multiple* `wgmma.mma_async` instructions to be in flight simultaneously. As long as these `wgmma.mma_async` instructions have the same accumulator shape, they can share the same accumulator tensor, i.e., write to the same register memory addresses. In that case, a fence is not required. For example, we don’t need to insert a `wgmma.fence` within the loop over `MMA_K` done as part of the `cute::gemm` call.
 
+## [Proxy (or Memory Proxy)](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#proxies)
 
+Proxy（也称为Memory Proxy）是在内存操作上附加一个标签。当两个内存操作用不同的方式访问内存时，这两个操作就属于不同的Proxy。
 
-```cpp
-cute::warpgroup_arrive();
-cute::gemm(tiled_mma, tCrA(_,_,_,read_pipe), tCrB(_,_,_,read_pipe), tCrC);
-cute::warpgroup_commit_batch();
-cute::warpgroup_wait<0>();
+[Operation types](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#operation-types) 这里的内存操作属于*generic proxy*。textures and surfaces类访存操作输入其他proxy。目前PTX只支持两种proxy: `.async, .alias`
+
+Value `.alias` of the `.proxykind` qualifier refers to memory accesses performed using virtually aliased addresses to the same memory location. 
+Value `.async` of the `.proxykind` qualifier specifies that the memory ordering is established between the async proxy and the generic proxy. The memory ordering is limited only to operations performed on objects in the state space specified. If no state space is specified, then the memory ordering applies on all state spaces.
+
+属于不同的proxy的访存操作之间需要内存同步的话，需要用*proxy fence* 
+
+[Isolating Traffic with Domains](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#isolating-traffic-with-domains)
+
+## Asynchronous Copy (PTX `cp.async`)
+
+With Ampere, NVIDIA introduced asynchronous data copy, a way of copying data directly from global memory to shared memory in an asynchronous fashion. To load data from global memory to shared memory on Volta, threads must first load data from global memory to registers, and then store it to shared memory. However, MMA instructions have high register usage and must share the register file with data-loading operations, causing high register pressure and wasting memory bandwidth for copying data in and out of RF.
+
+Async data copy mitigates this issue by fetching data from global memory (DRAM) and directly storing it into shared memory (with optional L1 access), freeing up more registers for MMA instructions. Data loading and compute can happen asynchronously which is more difficult from a programming model perspective but unlocks higher performance.
+
+This feature is implemented as PTX instruction thread-level async copy cp.async (documentation). The corresponding SASS is LDGSTS, asynchronous global to shared memory copy. The exact synchronization methods are async-group and mbarrier-based completion mechanisms, detailed here.
+![alt text](/assets/images/ampere-async-copy.png)
+
+[Controlling Data Movement to Boost Performance on the NVIDIA Ampere Architecture](https://developer.nvidia.com/blog/controlling-data-movement-to-boost-performance-on-ampere-architecture/)
+
+### [Completion Mechanisms for Asynchronous Copy Operations](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-asynchronous-copy-completion-mechanisms)
+
+用来追踪异步操作是否完成，和内存一致性（async proxy等）无关
+
+#### [Async-group mechanism](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-asynchronous-copy-completion-mechanisms-async-group)
+
+```c++
+// Example of .wait_all:
+cp.async.ca.shared.global [shrd1], [gbl1], 4;
+cp.async.cg.shared.global [shrd2], [gbl2], 16;
+cp.async.wait_all;  // waits for all prior cp.async to complete
+
+// Example of .wait_group :
+cp.async.ca.shared.global [shrd3], [gbl3], 8;
+cp.async.commit_group;  // End of group 1
+
+cp.async.cg.shared.global [shrd4], [gbl4], 16;
+cp.async.commit_group;  // End of group 2
+
+cp.async.cg.shared.global [shrd5], [gbl5], 16;
+cp.async.commit_group;  // End of group 3
+
+cp.async.wait_group 1;  // waits for group 1 and group 2 to complete
 ```
+
+#### [Mbarrier-based mechanism](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-asynchronous-copy-completion-mechanisms-mbarrier)
+
+PTX mbarrier
+
+
+
 
 
 
@@ -230,7 +281,7 @@ I can provide:
 ✅ examples from TMA, UMMA, and GMMA pipelines
 ✅ CUTLASS pipelines explained with proxy rules
 
-Tell me what you’d like!    `Sadfsda`
+Tell me what you’d like!   
 
 
 
@@ -241,3 +292,12 @@ Tell me what you’d like!    `Sadfsda`
 - A Formal Analysis of the NVIDIA PTX Memory Consistency Model
 - https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#memory-synchronization-domains
 - [PTX Memory Consistency Model](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#memory-consistency-model)
+- [`cp.async, cp.async.bulk`](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-asynchronous-copy) 
+- [NVIDIA TMA 全面分析](https://zhuanlan.zhihu.com/p/1945136522455122713)
+- [NVIDIA: Techniques for efficiently transferring data to a processor](https://patentimages.storage.googleapis.com/2e/65/c9/73308c2c12e3d5/US11080051.pdf)
+- [NVIDIA: Method and Apparatus for Efficient Access to Multidimensional Data Structures and/or Other Large Data Blocks](https://patentimages.storage.googleapis.com/23/89/13/0914c8f599bd9e/US20230289304A1.pdf)
+- NVIDIA: CUDA doc [https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html](https://link.zhihu.com/?target=https%3A//docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html)
+- NVIDIA Hopper Architecture [https://resources.nvidia.com/en-us-hopper-architecture/](https://link.zhihu.com/?target=https%3A//resources.nvidia.com/en-us-hopper-architecture/)
+- NVIDIA PTX doc [https://docs.nvidia.com/cuda/parallel-thread-execution/index.html](https://link.zhihu.com/?target=https%3A//docs.nvidia.com/cuda/parallel-thread-execution/index.html)
+- CUTLASS Tutorial: Mastering the NVIDIA® Tensor Memory Accelerator (TMA) [https://research.colfax-intl.com/tutorial-hopper-tma/](https://link.zhihu.com/?target=https%3A//research.colfax-intl.com/tutorial-hopper-tma/)
+- NVIDIA: Advanced Performance Optimization in CUDA

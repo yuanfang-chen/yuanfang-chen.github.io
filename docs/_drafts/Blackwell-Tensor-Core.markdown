@@ -11,15 +11,15 @@ typora-root-url: ..
 1. **Blackwell Tensor Cores – tcgen05**
 
    	* 2x throughput vs Hopper for all Hoper types: FP16, BF16, TF32, INT8, FP8
-
+		
    	* New block-scaled type support with mixed-inputs
-
+		
    	* MXFP8 / MXFP6 - 2x throughput vs Hopper FP8
-
+		
    	* MXFP4 - 4x throughput vs Hopper FP8
-
+		
    	* Expanding Tensor Core execution to two SMs
-
+		
    	* Fully asynchronous Tensor Core programming model
 
 2. **Tensor Memory (TMEM)**
@@ -76,6 +76,19 @@ TMEM is 256KB per SM in size, and is organized 2-dimensionally in 512 columns an
 - The number of columns allocated must be a power of 2 and at least 32
 - each warp can only access 32 of the 128 TMEM lanes
 - TMEM is only for Tensor Core; SIMT operations are not supported on TMEM
+
+
+
+The [shared memory descriptor](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-shared-memory-descriptor) describes the properties of multiplicand matrix in shared memory including its location in the shared memory of the current CTA. It is a 64-bit value contained in a register with the following layout:
+
+
+The [instruction descriptor](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-instruction-descriptor) describes the shapes, types and other details of all the matrices and the matrix-multiplication-and-accumulation operation. It is a 32-bit value in registers and the exact layout is dependent on the MMA-Kind:
+
+Typically, data gets into TMEM via UMMA operations, and is explicitly moved out to registers using tcgen05.ld for post-processing. It’s also possible for threads to manually load data into TMEM, either from SMEM through tcgen05.cp or from registers through tcgen05.st. However, TMEM access patterns for explicit load and store are very restricted. Each warp within a warpgroup can only access 32 lanes (with warp 0 associated to lanes 0-31, warp 1 to lanes 32-63, and so forth). Additionally, both the UMMA operation and the data movement operations expect certain data layouts. Luckily for us, CUTLASS provides utility functions that we’ll cover later that simplify the process of organizing data via swizzling. That said, those interested can find the layout information in the PTX guide.
+
+Finally, besides UMMA operations and these data movement instructions, no other operations access data from TMEM. In other words, all pre-processing must happen before the data is loaded onto TMEM, and all post-processing must happen after the data is retrieved out of TMEM.
+
+
 
 ## Prefered Thread Block Cluster
 

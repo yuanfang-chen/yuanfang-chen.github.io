@@ -1,28 +1,36 @@
 ---
 layout: post
-title:  "CUTLASS cute for developer"
+title:  "CUTLASS cute layout"
 # date:   2025-11-11 11:18:26 -0800
 categories: CUDA
 typora-root-url: ..
+mathjax: true
 ---
 
 * TOC
 {:toc}
-## Library Organization
+## 什么是Layout
 
-CuTe is a header-only C++ library, so there is no source code that needs building. Library headers are contained within the top level [`include/cute`](https://github.com/NVIDIA/cutlass/tree/main/include/cute) directory, with components of the library grouped by directories that represent their semantics.
 
-| Directory                                                    | Contents                                                     |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [`include/cute`](https://github.com/NVIDIA/cutlass/tree/main/include/cute) | Each header in the top level corresponds to one of the fundamental building blocks of CuTe, such as [`Layout`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/layout.hpp) and [`Tensor`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/tensor.hpp). |
-| [`include/cute/container`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/container) | Implementations of STL-like objects, such as tuple, array, and aligned array. |
-| [`include/cute/numeric`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/numeric) | Fundamental numeric data types that include nonstandard floating-point types, nonstandard integer types, complex numbers, and integer sequence. |
-| [`include/cute/algorithm`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/algorithm) | Implementations of utility algorithms such as copy, fill, and clear that automatically leverage architecture-specific features if available. |
-| [`include/cute/arch`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/arch) | Wrappers for architecture-specific matrix-matrix multiply and copy instructions. |
-| [`include/cute/atom`](https://github.com/NVIDIA/cutlass/tree/main/include/cute/atom) | Meta-information for instructions in `arch` and utilities like partitioning and tiling. |
+
+## Math Background
+
+The **domain** is the set of all allowed *inputs* for a function, the **codomain** is the set containing all *potential* outputs (the "target set").
+
+### injective function
+
+### congruent & profiles
+
+Also note that the `Shape` and `Stride` are assumed to be ***congruent***. That is, `Shape` and `Stride` have the same **tuple profiles**. 
+
+```cpp
+static_assert(congruent(my_shape, my_stride));
+```
+
 
 
 ## include/cute/numeric/arithmetic_tuple.hpp
+
 a lightweight numeric tuple type defined as `template<class... T> struct ArithmeticTuple : public tuple<T...> { ... };`. It wraps a cute::tuple and provides element-wise numeric semantics (constructors, arithmetic operators, printing, and iterator support).
 
 ### ScaledBasis 
@@ -99,7 +107,7 @@ Over standard-conforming tuple implementations, this appears to accelerate compi
 * `tuple_repeat<N>(x)`: Make a tuple of Xs of tuple_size N
 * `repeat<N>(x)`: Make repeated Xs of rank N
 * `repeat_like(t, x)`: Make a tuple of Xs the same profile as tuple T
-* `group(t)`: Group the elements [B,E) of a T into a single element. e.g. group<2,4>(T<_1,_2,_3,_4,_5,_6>{}) => T<_1,_2,T<_3,_4>,_5,_6>{}
+* `group<B, E>(t)`: Group the elements [B,E) of a T into a single element. e.g. `group<2,4>(T<_1,_2,_3,_4,_5,_6>{}) => T<_1,_2,T<_3,_4>,_5,_6>{}`
 * `append<N>(t, x)`: Extend a T to rank N by appending/prepending an element
 * `append(t, x)`: Extend a T to rank N by appending/prepending an element
 * `prepend<N>(t, x)`: Extend a T to rank N by appending/prepending an element
@@ -144,9 +152,9 @@ CuTe defines the IntTuple concept as either an integer, or a tuple of IntTuples.
 * `depth`: DAG的深度
 * `depth(IntTuple)`: The number of hierarchical `IntTuple`s. A single integer has depth 0, a tuple of integers has depth 1, a tuple that contains a tuple of integers has depth 2, etc.
 
-* `product`:
+* `product`: `product((_1,(_2,(_3)),_4)) = _24`
 
-* `product_each`:
+* `product_each`: `product_each(((_2,_1),(_2,(_2)),(_3,_4))) = (_2,_4,_12)`
 
 * `product_like`:
 
@@ -265,8 +273,64 @@ Elementwise [all] comparison
 * `elem_gtr(IntTupleA, IntTupleB)`: `elem_less(IntTupleB, IntTupleA)`
 * `elem_geq(IntTupleA, IntTupleB)`: `!elem_less(IntTupleA, IntTupleB)`
 
+## Layout Coordinates
+
+With the notion of compatibility above, we emphasize that every `Layout` accepts multiple kinds of coordinates. Every `Layout` accepts coordinates for any `Shape` that is compatible with it. CuTe provides mappings between these sets of coordinates via a colexicographical order.
+
+Thus, all Layouts provide two fundamental mappings:
+
+- the map from an input coordinate to the corresponding natural coordinate via the `Shape`, and
+- the map from a natural coordinate to the index via the `Stride`.
+
+## By-mode Composition
+
+For this reason, `composition` also works when its second parameter – the `B` – is a `Tiler`. **In general, a tiler is a layout or a tuple-of-layouts** (note the generalization on `IntTuple`), which can be used as follows
+
+## Composition Tilers
+
+In summary, a `Tiler` is one of the following objects.
+
+1. A `Layout`.  For example: `(6, 8) : (1, 12)`
+2. A tuple of `Tiler`s.  For example, `tuple<(2:1), (4:1)>`
+3. A `Shape`, which will be interpreted as a tiler of `Layout`s with stride-1. For example `Shape(2, 4)` is used as `tuple<(2:1), (4:1)>`
+
+## Complement
+
+The complement `(3,2):(2,12)` can be viewed as the “layout of the repetition.”
+
+## Division (Tiling) - 矩阵分块
+
+\\(A \oslash B := A \circ (B,B^*)\\)
+
+### Logical Divide 2-D Example
+
+![divide2.png](https://docs.nvidia.com/cutlass/latest/_images/divide2.png)
+
+`A = (9,(4,8)):(59,(13,1))` 
+`B = <3:3, (2,4):(1,8)>`
+
+For "A logical divide B", the semantic meaning of B is that 
+
+- 第一个mode (3:3) ：每3个取一个元素；一共取3个元素
+- 第二个mode中的第一个mode (2:1)：每1个取一个元素；一共取2个元素
+- 第二个mode中的第二个mode (4:8)：每8个取一个元素；一共取4个元素
+
+## Product (Tiling) - 分块拼接
+
+\\(A \otimes B := (A, A^* \circ B)\\)
+
+### [Blocked and Raked Products](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/cute/02_layout_algebra.html#blocked-and-raked-products)
+
+```c++
+// @post rank(result) == 2
+// @post compatible(layout_a, layout<0>(result))
+// @post compatible(layout_b, layout<1>(result))
+```
+
+
 
 ## Layout algebra
+
 ### Layout construction
 * `make_shape(Ts const&... t)`
 * `make_stride(Ts const&... t)`
@@ -329,7 +393,35 @@ dice(Coord const& c, Layout<Shape,Stride> const& layout);
 domain_offset(Coord const& coord, Layout<Shape,Stride> const& layout);
 ```
 
+```c++
+-------------------------------
+SLICING TUPLES
+-------------------------------
+a = (_2,_3,_4,(_5,_6))
+a(1) = ()
+a(_) = (_2,_3,_4,(_5,_6))
+a(_,1,_,_) = (_2,_4,(_5,_6))
+a(_,1,_,(_,_)) = (_2,_4,_5,_6)
+a(_,1,_,(_,2)) = (_2,_4,_5)
+a(_,1,_,(1,2)) = (_2,_4)
+a(_,1,_,(_,1)) = (_2,_4,_5)
+a(_,1,_,(1,1)) = (_2,_4)
+-------------------------------
+DICING TUPLES
+-------------------------------
+a = (_2,_3,_4,(_5,_6))
+a(1) = (_2,_3,_4,(_5,_6))
+a(_) = ()
+a(_,1,_,_) = (_3)
+a(_,1,_,(_,_)) = (_3)
+a(_,1,_,(_,2)) = (_3,_6)
+a(_,1,_,(1,2)) = (_3,_5,_6)
+```
+
+
+
 ### Transform the modes of a layout
+
 transform_layout
 transform_layout
 
@@ -342,8 +434,8 @@ transform_layout
 * `filter(layout)`: Remove all of the 0-strides and 1-sizes, Return 1-shape if empty
 * `filter(layout, target_profile)`: Apply filter at the terminals of trg_profile
 
-### Append, Prepend, replace
-* append
+### Append, Prepend, Replace
+* `append(layout, layout_x={})`: append layout_x; if layout_x is not specified, use `Layout(shape(1), stride(0))`as layout_x
 * append
 * prepend
 * prepend
@@ -416,10 +508,30 @@ ceil_div(Target                 const& target,
 
 TODO
 
+
+
+## TMA Tensor
+
+TMA可以做SMEM和GMEM之间的双向拷贝。普通的GMEM读写是通过指针加offset的方式（offset是1维的）；而使用TMA访问GMEM，需要使用tensor coord（coord可能是多维的）。
+
+
+
 ## Reference
 
 1. [GPUMode - Lecture 57: CuTe](https://www.youtube.com/watch?v=vzUhbDO_0qk)
 1. [知乎 - 深入分析CUTLASS系列](https://zhuanlan.zhihu.com/p/677616101)
 1. [知乎 - cute 之 Layout](https://www.zhihu.com/people/reed-84-49/posts)
 1. [CUTLASS CUTE笔记](https://www.zhihu.com/people/li-yi-xing-29/posts)
+1. [CUTLASS CUTE笔记 (4) - Layout的Composition](https://zhuanlan.zhihu.com/p/28356098779)
+1. [Categorical Foundations for CuTe Layouts](https://research.colfax-intl.com/categorical-foundations-for-cute-layouts/)
+1. [A note on the algebra of CuTe Layouts](https://research.colfax-intl.com/wp-content/uploads/2024/01/layout_algebra.pdf)
+1. https://leimao.github.io/tags/CuTe/
+1. [Lei Mao - CuTe Layout Algebra](https://leimao.github.io/article/CuTe-Layout-Algebra/)
+1. [CuTe Blocked and Raked Products](https://leimao.github.io/blog/CuTe-Blocked-Raked-Products/)
 
+1. [Modeling Layout Abstractions Using Integer Set Relations](https://arxiv.org/abs/2511.10374)
+1. https://en.wikipedia.org/wiki/Bijection,_injection_and_surjection
+1. https://en.wikipedia.org/wiki/Functor
+1. [domain, codomain, image](https://en.wikipedia.org/wiki/Codomain)
+1. https://en.wikipedia.org/wiki/Bijection
+1. https://en.wikipedia.org/wiki/Surjective_function
