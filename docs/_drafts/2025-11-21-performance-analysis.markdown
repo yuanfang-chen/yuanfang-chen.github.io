@@ -49,9 +49,7 @@ In general, there are two overarching strategies to “feed the beast,” which 
 - **The first strategy** is effective threadblock scheduling, which entails distributing the computation among the CTAs to obtain good load balancing and a higher rate of L2 cache hits. We will discuss this in a later blog post, but for now, we refer curious readers to the techniques of threadblock rasterization and persistent kernels, for instance as implemented in CUTLASS. 
 - **The second strategy**, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
 
-
-
-<img src="https://docs.nvidia.com/cutlass/_images/gemm-hierarchy-with-epilogue.png" alt="img"  />
+![GEMM tiles are evenly divided among available SMs](/assets/images/gemm-hierarchy-with-epilogue.png)
 
 ## Persistent Kernel
 
@@ -61,12 +59,11 @@ PS: 事实上，在同一时间，GPU上可能有多个Kernel在跑。所以一�
 
 **without persistent kernel**
 
-![GEMM tiles are evenly divided among available SMs](https://docs.nvidia.com/cutlass/_images/non_persistent.png)
+![GEMM tiles are evenly divided among available SMs](/assets/images/non_persistent.png)
 
 **with persistent kernel**
 
-![GEMM tiles are unevenly divided among available SMs, leading to workload imbalance](https://docs.nvidia.com/cutlass/_images/persistent_static.png)
-
+![GEMM tiles are unevenly divided among available SMs, leading to workload imbalance](/assets/images/persistent_static.png)
 
 ```c++
 // Non-persistent kernel
@@ -253,9 +250,9 @@ CUTLASS’s grouped kernel is a persistent kernel which launches multiple proble
 
 8 threadblocks
 
-![ALT](https://docs.nvidia.com/cutlass/_images/grouped-gemm-schedule-2x2.png)
+![ALT](/assets/images/grouped-gemm-schedule-2x2.png)
 
-![ALT](https://docs.nvidia.com/cutlass/_images/grouped-gemm-schedule-varied.png)
+![ALT](/assets/images/grouped-gemm-schedule-varied.png)
 
 ## Preferred Thread Block Clusters
 
@@ -269,9 +266,9 @@ CUTLASS’s grouped kernel is a persistent kernel which launches multiple proble
 
 The *Programmatic Dependent Launch* mechanism allows for a dependent *secondary* kernel to launch before the *primary* kernel it depends on in the same CUDA stream has finished executing. Available starting with devices of compute capability 9.0, this technique can provide performance benefits when the *secondary* kernel can complete significant work that does not depend on the results of the *primary* kernel.
 
-![GPU activity timeline](https://docs.nvidia.com/cuda/cuda-c-programming-guide/_images/gpu-activity.png)
+![GPU activity timeline](/assets/images/gpu-activity.png)
 
-![Concurrent execution of ``primary_kernel`` and ``secondary_kernel``](https://docs.nvidia.com/cuda/cuda-c-programming-guide/_images/preamble-overlap.png)
+![Concurrent execution of ``primary_kernel`` and ``secondary_kernel``](/assets/images/preamble-overlap.png)
 
 ## NCCL
 
