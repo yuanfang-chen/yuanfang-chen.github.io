@@ -1,5 +1,5 @@
 ---
-layout: post
+fylayout: post
 title:  "CUDA Performance Analysis"
 # date:   2025-11-21 11:18:26 -0800
 categories: CUDA
@@ -20,12 +20,15 @@ mathjax: true
 - 作为对 Amdahl 定律的补充，该定律由 John Gustafson 和 Edwin Barsis 提出。
 - **假设：随着计算资源的增加，问题尺寸会变大**
 - 它关注随着问题规模（而非固定的工作负载）的增大，并行计算的性能提升。它假设当处理器数量增加时，工作负载的总大小也会按比例增加，这更贴合实际应用中处理更大、更复杂问题的场景。
+- lesson learned: 随着可用处理器数量的增加，用户倾向于扩大问题规模，以充分利用提升的计算能力，从而保持执行时间不变
 
 ### Little's law
 
 - 虽然 Little 定律最初源于排队论，但它在并行和分布式系统中被广泛应用。
 
 - 它描述了在一个稳定的系统中，平均客户数量（\\(L\\)）等于客户的平均到达率（\\(\lambda\\)）乘以客户在系统中花费的平均时间（\\(W\\)），即\\(L=\lambda W\\)。在计算领域，它有助于分析系统吞吐量、延迟和并行度之间的关系。
+
+-  lesson learned: maximizing **instructions in flight (concurrency)** to hide memory/compute latency, ensuring GPU units (warps/cores) are always busy, especially by having enough active threads to saturate memory bandwidth. 但是单独通路的tensor core，导致little law适用SIMT core，不适用tensor core，tensor core只能使用流水掩盖
 
 ### Scaling law
 
@@ -46,7 +49,47 @@ In general, there are two overarching strategies to “feed the beast,” which 
 - **The first strategy** is effective threadblock scheduling, which entails distributing the computation among the CTAs to obtain good load balancing and a higher rate of L2 cache hits. We will discuss this in a later blog post, but for now, we refer curious readers to the techniques of threadblock rasterization and persistent kernels, for instance as implemented in CUTLASS. 
 - **The second strategy**, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
 
-### [Quantization](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization)
+
+
+<img src="https://docs.nvidia.com/cutlass/_images/gemm-hierarchy-with-epilogue.png" alt="img"  />
+
+## Persistent Kernel
+
+What is **Wave**: In a GPU, a wave refers to a batch of thread blocks that can be assigned to all available streaming multiprocessors (SMs) at once. 
+
+PS: 事实上，在同一时间，GPU上可能有多个Kernel在跑。所以一个Kernel所能使用的SM数量是无法静态确定的。
+
+**without persistent kernel**
+
+![GEMM tiles are evenly divided among available SMs](https://docs.nvidia.com/cutlass/_images/non_persistent.png)
+
+**with persistent kernel**
+
+![GEMM tiles are unevenly divided among available SMs, leading to workload imbalance](https://docs.nvidia.com/cutlass/_images/persistent_static.png)
+
+
+```c++
+// Non-persistent kernel
+__device__ non_persistent_kernel(...) {
+  setup_common_data_structures();
+  dim3 workCoordinates = blockIdx;
+  coordinate_specific_compute(workCoordinates);
+}
+
+// Static Persistent Kernel
+__device__ static_persistent_kernel(...) {
+  setup_common_data_structures(...);
+  dim3 workCoordinates = blockIdx;
+  bool isValidId;
+  do {
+    coordinate_specific_compute(workCoordinates);
+    std::tie(isValidId, workCoordinates) = staticTileScheduler.fetch_next_work();
+  } while (isValidId);
+}
+```
+
+
+### [Quantization](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization) (SM之间切分)
 
 #### Wave Quantization
 
@@ -60,19 +103,55 @@ If the number of work units exceeds the number of available SMs, then the work u
 
 ![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/quantization.png?resize=590%2C540&ssl=1)
 
+
+
 The impact of wave quantization decreases as the number of waves increases (AKA. as the number of threadblocks increase). However, increasing the number of waves can be difficult, especially considering that the number of SMs on NVIDIA GPUs continues to grow with newer architectures. So it is important that we come up with strategies to mitigate the impact of wave quantization without making assumptions on the problem size.
 
-**解决wave quantization的方案一：增加更多的Work unit**
+##### 增加更多的Work unit
 
 增加更多work unit的方式之一是把bN减半。**缺点是这样会降低[arithmetic intensity](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#math-mem)**，从而导致受益不够。
 
 ![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/split-mn-more-tiles.png?resize=2053%2C1243&ssl=1)
 
-**解决wave quantization的方案二：stream-k**
+##### sliced-k 
+
+> **reduction across warps on shared memory in CTA**
+
+优点：提升单个 SM 的资源利用率来改善性能
+
+缺点：解决不了M/N小，K大的问题
+
+![img](https://picx.zhimg.com/v2-c7adbe37ee93405af0c0917fafcd87b5_1440w.jpg)
+
+##### split-k
+
+> **reduction across CTAs**
+
+
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/split-k.png?resize=2006%2C1227&ssl=1)
+
+
+
+##### **stream-k **
+
+stream-k是一种负载均衡的手段，其实现利用了persistent kernel。但是persistent kernel本身和负载均衡无关。
 
 [Our code sample on GitHub](https://github.com/ColfaxResearch/cfx-article-src/tree/master/streamk) provides three examples of schedulers: a trivial non-persistent scheduler that assigns 1 worktile to each CTA over a grid determined by the problem shape; a data-parallel persistent scheduler; and a Stream-K hybrid scheduler which incorporates a some but not all of CUTLASS’s optimizations. In practice, we found that many of CUTLASS’s optimizations were necessary to get reasonable performance: notably, the additional GMEM accesses and smaller tile sizes caused by reduction are a real cost, and the boundaries of Stream-K work assignments need to be carefully tweaked to minimize this cost.
 
 
+
+
+
+
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/stream-k.png?resize=1768%2C1104&ssl=1)
+
+##### Hybrid Stream-K
+
+naive stream-k is bad for cache
+
+![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/hybrid.png?resize=1906%2C1202&ssl=1)
 
 ![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/m1024-no-heuristic.png?resize=720%2C540&ssl=1)
 
@@ -81,6 +160,24 @@ The vertical dotted lines denote the wave boundaries. As expected, there is a sh
 
 
 ## Optimizations
+
+
+
+### Threadblock Rasterization (6 SMs)
+
+An advantage of persistent kernels independent of the wave quantization issue is the ability to choose the order in which worktiles are launched. 
+
+**Rasterization along M**
+
+![rasterization along M](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/rasterization-2.png?resize=503%2C540&ssl=1)
+
+**Rasterization along M&N**
+
+Left; rasterization along M with swizzle 2. Right; rasterization along M with swizzle 1.
+
+<img src="https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/swizzle-2.png?resize=960%2C506&ssl=1" alt="img" style="zoom: 67%;" />
+
+
 
 ### Pipelining
 
@@ -129,53 +226,36 @@ Masking data transfer by using asynchronous copy (TMA on Hopper or `cp.async` on
 
 ![img](https://i0.wp.com/github.com/NVIDIA/cutlass/raw/main/media/images/software-pipeline.png?ssl=1)
 
-### Threadblock Rasterization (6 SMs)
+## [Blackwell Cluster Launch Control (CLC)](https://docs.nvidia.com/cutlass/media/docs/cpp/blackwell_cluster_launch_control.html)
 
-An advantage of persistent kernels independent of the wave quantization issue is the ability to choose the order in which worktiles are launched. 
+persistent kernel限制在于：在运行时（realtime）无法确切知道可以利用的 SM 数量。某些 SM 可能已被其他内核占用，因此其资源不可用。这使得在各个 SM 之间实现负载均衡变得十分困难。
 
-**Rasterization along M**
+```c++
+// Dynamic Persistent Kernel
+__device__ clc_dynamic_persistent_kernel(...) {
+  setup_common_data_structures(...);
+  dim3 workCoordinates = blockIdx;
+  dim3 newClcID;
+  bool isValidId;
+  do {
+    coordinate_specific_compute(workCoordinates);
+    std::tie(isValidId, newClcID) = clcTileScheduler.fetch_next_work();
+    workCoordinates = newClcID;
+  } while (isValidId);
+}
+```
 
-![rasterization along M](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/rasterization-2.png?resize=503%2C540&ssl=1)
-
-**Rasterization along M&N**
-
-Left; rasterization along M with swizzle 2. Right; rasterization along M with swizzle 1.
-
-<img src="https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/swizzle-2.png?resize=960%2C506&ssl=1" alt="img" style="zoom: 67%;" />
-
-
-
-### Parallelized Reductions
-
-#### sliced-k
-
-![img](https://picx.zhimg.com/v2-c7adbe37ee93405af0c0917fafcd87b5_1440w.jpg)
-
-#### split-k
-
-sliced-k could only boost throughput of single SM
-
-#### ![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/split-k.png?resize=2006%2C1227&ssl=1)stream-k
-
-split-k needs synchronization and reduction
-
-
-
-![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/stream-k.png?resize=1768%2C1104&ssl=1)
-
-#### Hybrid Stream-K
-
-naive stream-k is bad for cache
-
-![img](https://i0.wp.com/research.colfax-intl.com/wp-content/uploads/2024/12/hybrid.png?resize=1906%2C1202&ssl=1)
-
-
+https://www.modular.com/blog/matrix-multiplication-on-blackwell-part-4---breaking-sota
 
 ## [Grouped Kernel Schedulers](https://docs.nvidia.com/cutlass/media/docs/cpp/grouped_scheduler.html)
 
 CUTLASS’s grouped kernel is a persistent kernel which launches multiple problems (e.g., GEMMs, SYR2Ks) within a single CUDA kernel launch.
 
+8 threadblocks
 
+![ALT](https://docs.nvidia.com/cutlass/_images/grouped-gemm-schedule-2x2.png)
+
+![ALT](https://docs.nvidia.com/cutlass/_images/grouped-gemm-schedule-varied.png)
 
 ## Preferred Thread Block Clusters
 
@@ -287,6 +367,8 @@ void device_copy_vector4(int* d_in, int* d_out, int N) {
 
 - [How to Scale Your Model](https://jax-ml.github.io/scaling-book/)
 
+- [cutlass GEMM——sliced-K、split-K & stream-K 分析 （一）](https://zhuanlan.zhihu.com/p/713411778)
+
 - [Latency Numbers Every Programmer Should Know](https://colin-scott.github.io/personal_website/research/interactive_latency.html)
 
 - [Building Machine Learning Systems for a Trillion Trillion Floating Point Operations](https://www.youtube.com/watch?v=139UPjoq7Kw&t=1229s)
@@ -304,6 +386,8 @@ void device_copy_vector4(int* d_in, int* d_out, int N) {
 - [The Technology Behind BLOOM Training](https://huggingface.co/blog/bloom-megatron-deepspeed)
 
 - [Optimization Techniques for GPU Programming](https://dl.acm.org/doi/10.1145/3570638)
+
+- https://d2l.ai/chapter_computational-performance/index.html
 
 - [CUDA Pro Tip: Increase Performance with Vectorized Memory Access](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
 

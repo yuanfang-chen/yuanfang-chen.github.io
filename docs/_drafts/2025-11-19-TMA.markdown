@@ -80,6 +80,8 @@ else:
 
 正常情况下，编译器需要静态决定算子用的寄存器数量，这样会强制给producer和consumer分配同样数量的寄存器。但问题是producer一般是用TMA搬运数据，很少用到寄存器，但却被迫要和consumer用同样数量的寄存器。显然，这样会造成寄存器的浪费，因此在Hopper上，setmaxnreg指令可以在运行时让warp之间重新分配寄存器。用setmaxnreg指令把producer的寄存器转给consumer用，这样可以提高资源使用率。
 
+![alt text](/assets/images/hopper-register.png)
+
 ```cpp
 // Example values for Hopper GEMM with 1 consumer warpgroup
 using LowerRegisterCount = Int<40>;
@@ -121,7 +123,7 @@ There are two pipelining strategies that are effective on the Hopper architectur
 - **Multistage**. Masking data transfer by using asynchronous copy (TMA on Hopper or cp.async on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
 
 
-![alt text](/assets/images/hopper-register.png)
+
 
 
 ### Blackwell Warp Specialization
