@@ -90,6 +90,10 @@ Finally, besides UMMA operations and these data movement instructions, no other 
 
 
 
+https://docs.nvidia.com/cuda/parallel-thread-execution/index.html?highlight=tcgen05%2520ld#tcgen05-memory-consistency-model
+
+
+
 ## Prefered Thread Block Cluster
 
 

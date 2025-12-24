@@ -30,6 +30,10 @@ mathjax: true
 
 -  lesson learned: maximizing **instructions in flight (concurrency)** to hide memory/compute latency, ensuring GPU units (warps/cores) are always busy, especially by having enough active threads to saturate memory bandwidth. 但是单独通路的tensor core，导致little law适用SIMT core，不适用tensor core，tensor core只能使用流水掩盖
 
+![img](/assets/images/little-law1.png)
+
+![img](/assets/images/little-law2.png)
+
 ### Scaling law
 
 - strong scaling
@@ -50,6 +54,8 @@ In general, there are two overarching strategies to “feed the beast,” which 
 - **The second strategy**, which we focus on in this tutorial, is to overlap copying with math operations. In particular, while the tensor cores are busy multiplying a batch of numbers that they receive, we should tell the copying units to copy the next batch of numbers. That way, we effectively hide part of the copying latency. This is the goal of pipelining.
 
 ![GEMM tiles are evenly divided among available SMs](/assets/images/gemm-hierarchy-with-epilogue.png)
+
+大方向：先解决负载均衡的问题（且降低其overhead），再解决单核（SM）利用率。
 
 ## Persistent Kernel
 
@@ -156,11 +162,32 @@ The vertical dotted lines denote the wave boundaries. As expected, there is a sh
 
 
 
-## Optimizations
+## [Blackwell Cluster Launch Control (CLC)](https://docs.nvidia.com/cutlass/media/docs/cpp/blackwell_cluster_launch_control.html)
+
+persistent kernel限制在于：在运行时（realtime）无法确切知道可以利用的 SM 数量。某些 SM 可能已被其他内核占用，因此其资源不可用。这使得在各个 SM 之间实现负载均衡变得十分困难。
+
+```c++
+// Dynamic Persistent Kernel
+__device__ clc_dynamic_persistent_kernel(...) {
+  setup_common_data_structures(...);
+  dim3 workCoordinates = blockIdx;
+  dim3 newClcID;
+  bool isValidId;
+  do {
+    coordinate_specific_compute(workCoordinates);
+    std::tie(isValidId, newClcID) = clcTileScheduler.fetch_next_work();
+    workCoordinates = newClcID;
+  } while (isValidId);
+}
+```
+
+https://www.modular.com/blog/matrix-multiplication-on-blackwell-part-4---breaking-sota
 
 
 
-### Threadblock Rasterization (6 SMs)
+
+
+## Threadblock Rasterization (6 SMs)
 
 An advantage of persistent kernels independent of the wave quantization issue is the ability to choose the order in which worktiles are launched. 
 
@@ -176,9 +203,9 @@ Left; rasterization along M with swizzle 2. Right; rasterization along M with sw
 
 
 
-### Pipelining
+## Pipelining
 
-#### Warp-specialization
+### Warp-specialization
 Specializing warps into producers (data transfer) and consumers (compute), and having them run concurrently.
 
 Warp Specialization is introduced in Hopper.
@@ -217,32 +244,13 @@ else:
 
 ![img](https://picx.zhimg.com/v2-8633e0b9f54f88a1a4eb7053c463980f_r.jpg)
 
-#### Multistage
+### Multistage
 
 Masking data transfer by using asynchronous copy (TMA on Hopper or `cp.async` on Ampere) to load the next set of data, while computing on the current set. Warps take on both producer and consumer roles.
 
 ![img](https://i0.wp.com/github.com/NVIDIA/cutlass/raw/main/media/images/software-pipeline.png?ssl=1)
 
-## [Blackwell Cluster Launch Control (CLC)](https://docs.nvidia.com/cutlass/media/docs/cpp/blackwell_cluster_launch_control.html)
 
-persistent kernel限制在于：在运行时（realtime）无法确切知道可以利用的 SM 数量。某些 SM 可能已被其他内核占用，因此其资源不可用。这使得在各个 SM 之间实现负载均衡变得十分困难。
-
-```c++
-// Dynamic Persistent Kernel
-__device__ clc_dynamic_persistent_kernel(...) {
-  setup_common_data_structures(...);
-  dim3 workCoordinates = blockIdx;
-  dim3 newClcID;
-  bool isValidId;
-  do {
-    coordinate_specific_compute(workCoordinates);
-    std::tie(isValidId, newClcID) = clcTileScheduler.fetch_next_work();
-    workCoordinates = newClcID;
-  } while (isValidId);
-}
-```
-
-https://www.modular.com/blog/matrix-multiplication-on-blackwell-part-4---breaking-sota
 
 ## [Grouped Kernel Schedulers](https://docs.nvidia.com/cutlass/media/docs/cpp/grouped_scheduler.html)
 
@@ -350,7 +358,87 @@ void device_copy_vector4(int* d_in, int* d_out, int N) {
 }
 ```
 
+### Occupancy
 
+CUDA occupancy is a metric that represents the ratio of **active warps** per multiprocessor (SM) to the **maximum possible number of active warps**.1 Higher occupancy generally allows the GPU to better hide "latency" (the time spent waiting for memory or math operations to finish) by switching to other warps that are ready to work.2
+
+
+
+Occupancy is calculated based on four primary hardware constraints.
+
+------
+
+#### 1. The Core Calculation
+
+The formula is straightforward, but the variables are determined by hardware limits:
+
+\\(\text{Occupancy} = \frac{\text{Active Warps Per SM}}{\text{Maximum Warps Per SM}}\\)
+
+To find the "Active Warps," you must determine which of the following three resources runs out first:
+
+1. **Registers** (per thread)
+2. **Shared Memory** (per block)
+3. **Thread Block Limit** (per SM)
+
+------
+
+#### 2. The Three Determining Factors
+
+##### A. Register Pressure
+
+Each SM has a fixed pool of registers (e.g., 64K registers). If your kernel uses many registers per thread, the GPU cannot fit as many threads onto the SM at once.
+
+- **Limit:** \\(\text{Active Blocks} \le \frac{\text{Total Registers per SM}}{\text{Registers per Thread} \times \text{Threads per Block}}\\)
+
+##### B. Shared Memory (SMem)
+
+Shared memory is allocated per thread block. If a kernel requires a large amount of shared memory, fewer blocks can reside on the SM.3
+
+
+
+- **Limit:** \\(\text{Active Blocks} \le \frac{\text{Total Shared Memory per SM}}{\text{Shared Memory per Block}}\\)
+
+##### C. Max Threads/Blocks per SM
+
+Every GPU architecture (Pascal, Ampere, Hopper, etc.) has hard limits regardless of how small your kernel is. For example, a common limit is **32 blocks** or **2048 threads** per SM.
+
+------
+
+#### 3. How to Calculate It (Tools)
+
+Calculating this by hand is difficult because hardware specs change between GPU generations. Instead, use these three methods:
+
+##### Method 1: The CUDA Occupancy Calculator (Excel)
+
+NVIDIA provides an [Excel Spreadsheet](https://www.google.com/search?q=https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html) where you input your GPU's Compute Capability (e.g., 8.6 for an RTX 30-series) and your kernel's resource usage (found via `nvcc --ptxas-options=-v`).
+
+##### Method 2: Nsight Compute (Recommended)
+
+This is the modern way to profile. Run your code through Nsight Compute, and it will give you a "Theoretical Occupancy" vs. "Achieved Occupancy" graph.
+
+- **Theoretical:** The max occupancy possible based on your code's resource usage.
+- **Achieved:** What actually happened during the run (often lower due to tail-end effects or uneven workloads).
+
+##### Method 3: API-based Calculation
+
+You can query the occupancy directly in your C++ code to dynamically choose a block size:
+
+C++
+
+```c++
+int minGridSize;
+int blockSize;
+cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, myKernel, 0, 0);
+```
+
+------
+
+#### 4. Is Higher Occupancy Always Better?
+
+**Not necessarily.** * **The "Cliff" Effect:** Increasing occupancy from 10% to 50% usually gives a massive speedup.
+
+- **Diminishing Returns:** Moving from 50% to 100% often provides little benefit, and can sometimes slow down the kernel if it causes cache thrashing.
+- **ILP (Instruction Level Parallelism):** Some kernels are faster with low occupancy but high work-per-thread (using more registers to do more work in a single thread).
 
 ## References
 
@@ -375,6 +463,8 @@ void device_copy_vector4(int* d_in, int* d_out, int N) {
 - [CUDA C++ Best Practices Guide](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide)
 
 - [Deep Dive on CUTLASS Ping-Pong GEMM Kernel](https://pytorch.org/blog/cutlass-ping-pong-gemm-kernel/)
+
+- [Inside NVIDIA GPUs: Anatomy of high performance matmul kernels](https://www.aleksagordic.com/blog/matmul)
 
 - [Accelerating HPC Applications with NVIDIA Nsight Compute Roofline Analysis](https://developer.nvidia.com/blog/accelerating-hpc-applications-with-nsight-compute-roofline-analysis/)
 

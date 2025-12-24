@@ -101,9 +101,10 @@ The behavior of these shortcuts may vary with the app you're using.
 
 
 
-## VSCode
+## [VSCode](https://code.visualstudio.com/shortcuts/keyboard-shortcuts-macos.pdf)
 
-xxx
+* **Control-W**: Switch Window
+* **Control-Y**: Remote-SSH: Connect to Host...
 
 ## [Chrome](https://support.google.com/chrome/answer/157179)
 

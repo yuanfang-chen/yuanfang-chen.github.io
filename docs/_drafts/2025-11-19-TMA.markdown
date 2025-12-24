@@ -191,3 +191,4 @@ __global__ void kernel(float* gmem, float* smem) {
 
 
 
+[NVIDIA TMA 全面分析](https://zhuanlan.zhihu.com/p/1945136522455122713)

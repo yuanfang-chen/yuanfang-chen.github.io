@@ -1,12 +1,20 @@
 ---
 layout: post
-title:  "cute Tensor"
+title:  "Tensor representation"
 # date:   2025-12-08 11:18:26 -0800
 categories: CUDA
 typora-root-url: ..
 ---
 
-# **Partitioning is tiling and/or composition followed by slicing.**
+## C++ mdspan
+
+https://en.cppreference.com/w/cpp/container/mdspan.html
+
+https://nvidia.github.io/cccl/libcudacxx/extended_api/mdspan.html
+
+## CUDA tensor
+
+**Partitioning is tiling and/or composition followed by slicing.**
 
 
 
@@ -28,4 +36,17 @@ The `Engine` concept is a wrapper for an iterator or array of data. It uses a st
 - Tile a `Tensor` using the same methods for tiling `Layout`s.
 - Slice a `Tensor` to retrieve subtensors.
 - Partitioning is tiling and/or composition followed by slicing.
+
+
+
+## Cutlass Tensor
+
+
+
+## Cute tensor
+
+## Triton tensor
+
+Linear Layouts: Robust Code Generation of Efficient
+Tensor Computation Using F2
 

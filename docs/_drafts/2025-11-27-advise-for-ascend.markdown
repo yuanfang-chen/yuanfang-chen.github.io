@@ -89,6 +89,8 @@ cublasdx可以完全定制kernel fusion
 
 
 
+
+
 建议Matmul API拆分成cublaslt和cublasdx
 
 
@@ -119,3 +121,56 @@ cublaslt的 input/output 是都在host
 这个能力cute Layout可以解决
 
 https://chatgpt.com/s/t_6902394f732481918af7f92f3b0a25da    Why cuBLASLt omits fill mode
+
+
+
+借鉴 “Linear Layouts: Robust Code Generation of Efficient Tensor Computation Using F2” 看如何给昇腾亲和的layout做定义
+
+
+
+[Ascend needs automatic warp specialization](https://github.com/triton-lang/triton/blob/b5a27fc1ab5fa22c0adad7409a50ef3e6271ada6/docs/meetups/11-05-2025/notes.md) 
+
+
+
+Other critera folks use when deciding on what language/framework to pick include: feature completeness and maturity. Is the language/framework in startup phase, are there teams using/supporting it, is it still evolving.
+
+
+
+Hongtao Yu, Meta - It depends on how the hardware is designed. If scheduling is better on chip, we won’t need to do it in software. Nvidia HW is super configurable but the HW can’t schedule efficiently. Nvidia needs to invest more in hardware scheduling. We'll be keeping an eye on this.
+
+
+
+Learn from Apple AMX / [Arm SME2](https://www.arm.com/technologies/sme2) to compute small matrix operation in CPU instead of on GPU. So ascend should be able to target CPU.
+
+
+
+need advanced auto-tuning techniques like below, because there is hardware-assisted pipelining/scheduling in hardware. 
+
+TritonForge: Profiling-Guided Framework for Automated Triton Kernel Optimization https://arxiv.org/abs/2512.09196
+
+> ​     High-performance GPU kernel optimization remains a critical yet labor-intensive task in modern machine learning workloads. Although Triton, a domain-specific language for GPU programming, enables developers to write efficient kernels with concise code, achieving expert-level performance still requires deep understanding of GPU architectures and low-level performance trade-offs. We present TritonForge, a profiling-guided framework for automated Triton kernel optimization. TritonForge integrates kernel analysis, runtime profiling, and iterative code transformation to streamline the optimization process. By incorporating data-driven feedback from profiling results, the system identifies performance bottlenecks, proposes targeted code modifications, and evaluates their impact automatically. While our prototype leverages large language models (LLMs) to assist in code reasoning and transformation, the framework remains modular and model-agnostic. Across diverse kernel types and GPU architectures, TritonForge achieves up to 5x performance improvement over baseline implementations and on average 1.76x of the cases are successful, providing a foundation for future research in automated GPU performance optimization.
+
+
+
+https://jlebar.com/2024/2/4/completeness.html
+
+**Upshot 2:** If you're designing an incomplete IR, I'd say you probably should design a programming language to go with it. This way you can enforce your IR's limitations at the level of user code, instead of having performance and functionality cliffs that are unpredictable to your users and that depend on which compiler backend they're using. I think this tight coupling between language and IR may be one of the reasons JAX and Triton have been so successful.
+
+A corollary of this is that your incomplete IR probably won't be relevant unless its associated programming language is successful. At which point, you should probably think about the programming language first and the IR second.
+
+
+
+## Little's law
+
+tensor core 必须依赖流水并行，硬件优化流水并行能力
+
+simt core依赖高度并行，需要类似warp scheduler
+
+
+
+[S72683 - CUDA Techniques to Maximize Memory Bandwidth and Hide Latency](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72683/)
+
+
+
+[Bill Dally - Trends in Deep Learning Hardware](https://www.youtube.com/watch?v=4u8iMr3iXR4)
+
