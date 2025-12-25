@@ -7,28 +7,35 @@ typora-root-url: ..
 mathjax: true
 ---
 
+![image-20251225144245290](/assets/images/triton-like-pytorch.png)
+
+![image-20251225144329395](/assets/images/pytorch-like-triton.png)
+
 
 
 ## Overview
 
+Triton is an intermediate language and compiler designed to overcome the limitations of existing vendor libraries for novel Deep Learning primitives by enabling efficient, portable implementations of tiled neural network computations.
+
+Triton is tile-based (tile is small rectangular sub-section of a tensor). In contrast, XLA is based on tensor, developers can not manipulate sub-tensor.
+
+Triton 开创了Tile编程
+Triton是一种取舍 :  portability / productivity / efficiency 
 Triton的性能预期：高下限，低上限，低指 > 80% SoL
+Triton支持的硬件: GPU, CPU, Accelerator
 
-Supported Targert: GPU, CPU, Accelerator
-
-
+![Screenshot 2025-12-25 at 2.26.44 PM](/assets/images/Screenshot 2025-12-25 at 2.26.44 PM.png)
 
 <img src="/assets/images/triton-compiler.png" alt="img"  />
 <img src="/assets/images/triton-vs-cuda.png" alt="img" style="zoom: 67%;" />
 
 ![Screenshot 2025-12-24 at 9.07.39 PM](/assets/images/Screenshot 2025-12-24 at 9.07.39 PM.png)
 
-### **Hopper added a lot of complexity, so would Ascend**
-
-Triton is an intermediate language and compiler designed to overcome the limitations of existing vendor libraries for novel Deep Learning primitives by enabling efficient, portable implementations of tiled neural network computations.
-
 The system introduces Triton-C, a C-like language for expressing tensor programs with parametric tile variables, an LLVM-based Triton-IR for tile-level analysis, and a Triton-JIT compiler that leverages novel optimization passes and an auto-tuner for efficient GPU code generation.
 
-Triton is tile-based (tile is small rectangular sub-section of a tensor). In contrast, XLA is based on tensor, developers can not manipulate sub-tensor.
+
+### **Hopper added a lot of complexity, so would Ascend**
+
 
 ### 目标
 
@@ -211,7 +218,19 @@ https://pytorch.org/blog/triton-kernel-compilation-stages/
 
 https://www.lei.chat/posts/triton-compiler-development-tips/
 
-### 总结
+## [Liger Kernel](https://pytorch.org/blog/peak-performance-minimized-memory/)
+Liger Kernel is an open source library of optimized Triton kernels designed to enhance the efficiency and scalability of training Large Language Models (LLMs). It focuses on kernel-level optimizations such as operation fusing and input chunking, achieving significant improvements in training throughput and GPU memory usage compared to existing implementations like those from HuggingFace. By using a single line of code, Liger Kernel can improve training throughput by 20% and reduce memory usage by 60%.
+
+**NOTE** Trition is expressive enough to have operation fusing and input chunking optimization.
+
+## [Triton-Distributed](https://triton-distributed.readthedocs.io/en/latest/)
+
+
+
+## [Profiling](https://youtu.be/PGUw2P55ZYM?si=fawMOhJq-BwTO9DR)
+Proton(profiling for Triton)
+
+## 总结
 
 Triton has trouble maintaining both 80% SoL and portability 
 
@@ -219,4 +238,20 @@ Triton does not support multi-CTA well (DSMEM, Hopper/Blackwell)
 
 Triton/Gluon composition vs C++/Assembly composition
 
-Ascend will have the same problem as Hopper / Blackwell: precise control is needed to 
+
+
+user want FAST AND EASY gpu programming language. BOTH FAST AND EASY; For a specific task, user decide what's kind of performance is acceptable, then they want to reach that performance goal ASAP. FAST first, then trade productivity for  < 20% perf drop is acceptable. 
+
+80% SoL (AKA 80/20 rule matters for prototying and Triton's main use case is prototyping, for example, [flash-linear-attention](https://github.com/fla-org/flash-linear-attention)) 
+
+Ascend will have the same problem as Hopper / Blackwell: precise control is needed to have 80% SoL
+
+Autotuning is important for Ascend
+
+People like Python or DSL. Adopt Python-first strategy instead of "we support Python"
+
+
+Attention-oriented (or whatever ops trending LLM needs), because that's the most important use case
+
+Windows-support
+

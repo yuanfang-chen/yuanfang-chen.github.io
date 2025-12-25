@@ -19,12 +19,12 @@
 # in the templates via {{ site.myvariable }}.
 
 title: ychen's blog
-email: your-email@example.com
+email: tabloid.adroit@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   random notes on compilers
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
-twitter_username: kula85
+#twitter_username: kula85
 github_username:  yuanfang-chen
 
 # https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll/setting-a-markdown-processor-for-your-github-pages-site-using-jekyll

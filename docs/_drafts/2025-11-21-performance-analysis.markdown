@@ -488,4 +488,10 @@ cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, myKernel, 0, 0);
 
 - [S61198 - CUTLASS: A Performant, Flexible, and Portable Way to Target Hopper Tensor Cores](https://www.nvidia.com/en-us/on-demand/session/gtc24-s61198/)
 
+- https://github.com/stas00/ml-engineering/blob/master/training/performance/README.md
+
+- https://hanlab.mit.edu/courses/2023-fall-65940
+
+- 
+
   

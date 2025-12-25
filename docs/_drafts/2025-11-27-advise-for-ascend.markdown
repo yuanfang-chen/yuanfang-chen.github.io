@@ -7,6 +7,9 @@ typora-root-url: ..
 typora-copy-images-to: ../assets/images
 ---
 
+## Find the right problem
+
+
 ## Architecture Advise
 
 ### TMA Store Reduce
