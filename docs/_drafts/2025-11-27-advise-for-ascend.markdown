@@ -4,6 +4,7 @@ title:  "Advise for Ascend"
 date:   2025-11-27 23:44:54 +0800
 categories: ascend
 typora-root-url: ..
+typora-copy-images-to: ../assets/images
 ---
 
 ## Architecture Advise
@@ -157,6 +158,43 @@ https://jlebar.com/2024/2/4/completeness.html
 **Upshot 2:** If you're designing an incomplete IR, I'd say you probably should design a programming language to go with it. This way you can enforce your IR's limitations at the level of user code, instead of having performance and functionality cliffs that are unpredictable to your users and that depend on which compiler backend they're using. I think this tight coupling between language and IR may be one of the reasons JAX and Triton have been so successful.
 
 A corollary of this is that your incomplete IR probably won't be relevant unless its associated programming language is successful. At which point, you should probably think about the programming language first and the IR second.
+
+
+
+triton need good debugging
+
+![Screenshot 2025-12-24 at 6.57.49 PM](/assets/images/Screenshot 2025-12-24 at 6.57.49 PM.png)
+
+
+
+
+
+
+
+## 2. The New Frontier: AI-Agentic Kernel Generation
+
+As of 2024–2025, the industry is shifting toward using **LLMs (like DeepSeek-R1 or GPT-4o) as compiler engineers**. This is often called "Agentic Compilation."
+
+Instead of a human writing a kernel for a new "long-tail" operation, an AI agent system (like **KernelFalcon** or **PRAGMA**) takes over:
+
+1. **Drafting:** The AI agent writes a candidate GPU kernel (often in Triton or CUDA).
+2. **Verification:** A "Verifier" agent runs the code on a real GPU to see if it’s correct and fast.
+3. **Iterative Refinement:** If the code is slow or buggy, the error logs and performance profiles are fed back to the AI. The AI "thinks" and rewrites the code.
+4. **Deployment:** After 10–15 minutes of "reasoning," the system produces a kernel that often beats human-written code.
+
+https://pytorch.org/blog/kernelfalcon-autonomous-gpu-kernel-generation-via-deep-agents/
+
+
+
+
+
+
+
+
+
+![Screenshot 2025-12-24 at 8.18.22 PM](/assets/images/Screenshot 2025-12-24 at 8.18.22 PM.png)
+
+
 
 
 

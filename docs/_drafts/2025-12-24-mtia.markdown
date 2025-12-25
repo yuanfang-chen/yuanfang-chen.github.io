@@ -1,0 +1,17 @@
+---
+layout: post
+title:  "MTIA"
+# date:   2025-12-08 11:18:26 -0800
+categories: CUDA
+typora-root-url: ..
+mathjax: true
+---
+
+
+
+[Triton for MTIA - Triton Developer Conference](https://docs.google.com/presentation/d/1Cd-X30A7c4sdjoK20GdEsDV3qHm9jglD/edit?usp=sharing&ouid=109270351505023978769&rtpof=true&sd=true)
+
+
+
+https://ai.meta.com/blog/meta-training-inference-accelerator-AI-MTIA/
+

@@ -47,6 +47,20 @@ The `Engine` concept is a wrapper for an iterator or array of data. It uses a st
 
 ## Triton tensor
 
-Linear Layouts: Robust Code Generation of Efficient
-Tensor Computation Using F2
+Linear Layouts: Robust Code Generation of Efficient Tensor Computation Using F2
 
+#### Linear Layouts
+
+**injective** (or "one-to-one") describes a property of a linear mapping where every unique input maps to a unique output. In the framework of Linear Layouts, this refers to the relationship between hardware resource bits and logical tensor coordinates.
+
+**surjective** describes a property of a linear mapping where the input resources (such as registers, threads, and warps) **represent the entire logical tensor**
+
+**Bijectivity:** When a layout is both injective and surjective, it is considered a **bijective** (or invertible) mapping
+
+
+
+https://ita9naiwa.github.io/mlsys/2025/10/27/ll-in-triton-part-1.html
+
+https://www.lei.chat/posts/triton-linear-layout-concept/
+
+https://ianbarber.blog/2025/06/11/linear-layouts-in-triton/
