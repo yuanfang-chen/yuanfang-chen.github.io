@@ -1,0 +1,14 @@
+---
+layout: post
+title:  "Neural Processors"
+# date:   2025-12-08 11:18:26 -0800
+categories: ML
+typora-root-url: ..
+mathjax: true
+---
+
+
+
+https://en.wikichip.org/wiki/neural_processor
+A Survey on Deep Learning Hardware Accelerators for Heterogeneous HPC Platforms 
+

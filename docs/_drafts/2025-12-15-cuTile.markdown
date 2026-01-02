@@ -6,3 +6,7 @@ categories: CUDA
 typora-root-url: ..
 ---
 
+## References
+
+https://docs.nvidia.com/cuda/cutile-python/index.html
+https://docs.nvidia.com/cuda/tile-ir/latest/sections/introduction.html

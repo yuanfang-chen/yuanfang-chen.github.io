@@ -1,0 +1,113 @@
+---
+layout: post
+title:  "MTIA 2i"
+# date:   2025-12-08 11:18:26 -0800
+categories: DSA
+typora-root-url: ..
+mathjax: true
+---
+
+## Overview
+
+- released (May 2025)
+- designed for recommendation systems, specifically Deep Learning Recommendation Models (DLRM)
+  - not seek to support every model to have optimal performances for models that matter the most
+- Unsuitable for large language models (LLMs)
+- Unstuitable for highly complex models
+- MTIA adopts a PyTorch-first design, offering proper support for eager mode and seamless integration with PyTorch.
+- Main goals:
+  - significantly lowering total cost of ownership (TCO) compared to GPUs
+  - offering sufficient
+flexibility to support a wide range of production models. While
+ensuring flexibility, our goal is not to stretch MTIA 2i to accommo-
+date every model at Meta, as doing so could move it away from its
+optimal design point. For models not supported by MTIA 2i, we
+can still leverage GPUs available on the market.
+
+Using LPDDR instead of HBM reduces costs but introduces lim-
+itations that make MTIA 2i unsuitable for certain models. With
+limited off-chip bandwidth, performance drops sharply as mod-
+els reach a complexity and size that exceeds the SRAM capacity.
+We believe that 2 GF/sample is unattainable for MTIA 2i because
+GEMMs become DRAM bandwidth-bound, and the latency of dense
+and sparse networks becomes prohibitive even at small batch sizes.
+For example, running LLMs efficiently on MTIA 2i is challenging
+due to limited LPDDR bandwidth. For the Llama2-7B model, our
+evaluation shows that the prefill stage meets the time-to-first-token
+requirement of 600ms, but the decode stage fails to generate each
+additional token within the latency requirement of 60ms.
+
+## New Features
+- **Dynamic INT8 quantization**: MTIA 2i supports dynamic INT8
+quantization by leveraging the Reduction Engine to identify the
+minimum and maximum values per batch, which are then used
+to derive scaling factors for row-wise quantization
+
+- **Compression**: MTIA 2i supports lossless Asymmetric Numeri-
+cal System (ANS) compression for weights, achieving up to a 50%
+compression ratio
+
+- **Sparsity**: MTIA 2i supports 2:4 weight sparsity in the Dot Product
+Engine, which could potentially double effective FLOPS. (however quality loss issue is non-trivial)
+
+- **Fast eager mode**: To better support PyTorch’s eager mode, MTIA
+2i provides hardware features that accelerate job launches. Eager
+mode executes operations immediately as they are called, rather
+than first compiling them into a static computation graph. We
+support eager mode for several reasons. First, ML training often
+requires eager mode, and with MTIA 2i supporting it, we can pro-
+totype the software ecosystem for future training chips. Second,
+many complex models in PyTorch cannot be fully compiled into a
+static graph, necessitating eager mode support even for ML infer-
+ence. Third, eager mode accelerates host-bound operations during
+inference that may not fit into the graph mode, such as merge, re-
+mote, or local networks. Fourth, it enables real-time weight updates,
+improving model freshness.
+To support eager mode, MTIA 2i includes several improvements
+over MTIA 1. The Control Core is upgraded from an ARM CPU
+with a single core to four cores. Additionally, the Control Core can
+broadcast Work Queue (WQ) descriptors for eager mode jobs to
+PEs, and the PEs are equipped with a Work Queue Engine (WQE)
+to DMA WQ requests from the Control Core. These improvements
+reduce PE job launch time by as much as 80%, launching jobs in
+under 1 µs and replacing jobs in less than 0.5 µs.
+
+- **Addressing bottlenecks in issuing instructions**: 
+  (1) GEMMs operations
+    - **Multiple Context Support**: New custom instructions were introduced to support multiple contexts, which prevents the need to unnecessarily duplicate writes to custom registers
+    - **Auto-Increment Offsets**: An auto-increment offset feature was added to matrix multiplication instructions, which is critical for maintaining high performance when issuing instructions in a tight loop
+    - **Memory Prefetching**: A prefetch feature was added to DMA_IN instructions. This allows data to be read from DRAM into the on-chip SRAM in advance of being loaded into the PE's local memory, helping to hide memory latency
+
+## Discussion: Unique Memory Hierarchy
+Compared to GPUs and other accelerators, the memory hierarchy
+of MTIA 2i is unconventional. It uses a large SRAM (256 MB) backed
+by LPDDR DRAM, avoiding HBM to reduce cost and power con-
+sumption. The larger SRAM is chosen to meet the stringent latency
+requirements of our recommendation models. Moreover, unlike
+large Transformer models [27], these relatively smaller models ex-
+hibit significant locality, allowing us to maximize data reuse in
+SRAM. This design shares similarities with those of Cerebras [20]
+and Groq [5], which rely exclusively on SRAM and omit DRAM
+and HBM. However, MTIA 2i incorporates LPDDR DRAM to com-
+plement the large SRAM, rather than eliminating DRAM entirely.
+
+## Keeping Up with Model Evolution
+Finally, we faced challenges in handling LayerNorm and SoftMax
+as we onboarded new models with different shapes. LayerNorm
+requires three distinct steps to process the data: row-wise mean,
+row-wise variance, and element-wise result. This process involves
+a mixture of fixed-function commands and RISC-V vector instruc-
+tions, balanced across the two cores in the PE. SoftMax was even
+more challenging because it involves five distinct steps, requiring
+careful pipelining across the RISC-V scalar and vector cores to bal-
+ance data fetch and computation from the DMA engine, as well
+as between the SIMD Engine and vector instructions. Additional
+steps were needed to transpose the input when the inner dimension
+was small, ensuring full throughput for SIMD computation. While
+a simple, low-performance implementation of these kernels was
+relatively straightforward, the various acceleration engines in the
+PE enabled much higher performance with an efficient pipelined
+computation.
+
+## References
+A of lessens could be learned from MTIA 2i. But if Ascend is targeting wide range of models and workloads, we may NOT be able to adopt many of these very special architectural optimization added in MTIA 2i.

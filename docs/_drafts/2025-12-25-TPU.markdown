@@ -1,0 +1,25 @@
+---
+layout: post
+title:  "TPU"
+# date:   2025-12-08 11:18:26 -0800
+categories: DSA
+typora-root-url: ..
+mathjax: true
+---
+
+## Motivation
+
+https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu
+
+
+
+## References
+
+- https://jax-ml.github.io/scaling-book/
+- https://docs.jax.dev/en/latest/pallas/tpu/index.html
+- [A domain-specific supercomputer for training deep neural networks](https://dl.acm.org/doi/10.1145/3360307)
+- https://dl.acm.org/doi/pdf/10.1145/3079856.3080246
+- [The Design Process for Google's Training Chips: TPUv2 and TPUv3](https://ieeexplore.ieee.org/document/9351692)
+- [Ten Lessons From Three Generations Shaped Google’s TPUv4i](https://ieeexplore.ieee.org/document/9499913)
+- [TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings](https://dl.acm.org/doi/abs/10.1145/3579371.3589350)
+

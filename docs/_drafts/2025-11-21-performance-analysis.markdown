@@ -7,6 +7,12 @@ typora-root-url: ..
 mathjax: true
 ---
 
+## 数学
+
+### [幂定律](https://zh.wikipedia.org/wiki/%E5%86%AA%E5%AE%9A%E5%BE%8B)
+
+
+
 ## 定律
 
 ### Amdahl's law
@@ -40,6 +46,30 @@ mathjax: true
 - weak scaling
 
 ### huang’s law
+
+
+
+## 指标
+
+### TOPS (On-Device AI)
+
+**TOPS (Trillions of Operations Per Second)** measures **Inference**. This is how your laptop or phone runs an existing AI model (like live translation, background blur, or a local LLM like Llama 3) efficiently without draining your battery.
+
+| **Chip Family**         | **NPU TOPS** | **Standout Feature**                                         |
+| ----------------------- | ------------ | ------------------------------------------------------------ |
+| **Snapdragon X2 Elite** | **80 TOPS**  | The efficiency king; leads in battery life and pure NPU throughput. |
+| **Apple M5**            | **~40-50+**  | Not just the NPU; Apple added "Neural Accelerators" to every GPU core, giving it a **4x boost** in AI tasks over the M4. |
+| **Intel Lunar Lake**    | **48 TOPS**  | Best for "Total Platform TOPS" (combining CPU + GPU + NPU) for complex agentic tasks. |
+| **AMD Ryzen AI 300**    | **50 TOPS**  | The favorite for local gaming AI and heavy multi-threaded creative work. |
+
+### FLOPS
+
+**FLOPS (Floating Point Operations Per Second)** measures **Precision**. This is used by NVIDIA and Google to train the next generation of "Frontier Models" (GPT-5, Gemini 2, etc.). Since training requires high math accuracy, we measure it in **PetaFLOPS** ($10^{15}$ operations).
+
+### The 2025 Heavyweights
+
+- **NVIDIA Blackwell Ultra (B200):** The gold standard. It delivers roughly **20 PetaFLOPS** of FP8 performance. Its new **FP4 precision** mode allows it to run inference on massive trillion-parameter models twice as fast as the original Blackwell.
+- **Google TPU v7 (Ironwood):** Google’s custom "scalpel." It hits about **4.6 PetaFLOPS**, but it is significantly more power-efficient than NVIDIA’s GPUs, allowing Google to scale "pods" of 9,000+ chips for massive training runs.
 
 ## The Big Picture
 
@@ -439,6 +469,24 @@ cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, myKernel, 0, 0);
 
 - **Diminishing Returns:** Moving from 50% to 100% often provides little benefit, and can sometimes slow down the kernel if it causes cache thrashing.
 - **ILP (Instruction Level Parallelism):** Some kernels are faster with low occupancy but high work-per-thread (using more registers to do more work in a single thread).
+
+## Perf/W
+
+Perf/W, or Performance per Watt (PPW), is a key energy efficiency metric in computing, measuring how much computational work (performance) a system achieves for each unit of electrical power (watt) it consumes, crucial for data centers, mobile devices, and sustainable computing to balance speed with energy cost and environmental impact. It's often used with Linux's perf tool, which can track performance events and power usage (like Intel RAPL) to calculate this ratio, helping optimize hardware for maximum efficiency, notes Supermicro, Wikipedia, and Medium. 
+How it works
+Performance: Measured by benchmarks like LINPACK (for supercomputers) or application-specific metrics (e.g., instructions per cycle, operations per second).
+Wattage: Measured by power monitoring features in the hardware, often accessed via Linux's perf tool using events like power/energy-pkg/ or power/energy-cores/.
+The Ratio: Performance (e.g., GFLOPS) / Power (Watts) = Performance per Watt (e.g., GFLOPS/W). 
+Why it's important
+Cost & Environment: Lowers energy bills and carbon footprint in large-scale computing.
+Device Constraints: Critical for spaceflight and mobile devices with limited power budgets.
+Hardware Selection: Guides designers to choose CPUs/GPUs that offer more speed for less power.
+
+## GF/sample
+In Deep Learning (DL), GF/sample stands for GigaFLOPs per sample.
+
+## Model FLOPs Utilization
+
 
 ## References
 

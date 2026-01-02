@@ -12,6 +12,12 @@ mathjax: true
 ![image-20251225144329395](/assets/images/pytorch-like-triton.png)
 
 
+## 二八定律
+巴莱特定律（Pareto Principle），也称二八定律或80/20法则，是由意大利经济学家帕累托（Vilfredo Pareto）提出的，核心思想是：在任何一组事物中，最重要的部分（约20%）所产生的效益或影响，往往占总体的绝大部分（约80%），而其余次要的80%因素只占少数影响。它揭示了事物普遍存在的 不平衡性，即“关键少数”与“次要多数”的现象，广泛应用于经济、管理、时间管理、软件开发等领域。 
+
+核心理念
+- 关键少数 (Vital Few) vs. 次要多数 (Trivial Many)：20%的关键因素（原因/投入）产生了80%的成果（结果/产出）。
+- 不平衡性：投入和产出、原因和结果之间存在天然的、不均等的关系。
 
 ## Overview
 
@@ -102,6 +108,9 @@ The Triton-JIT compiles and optimizes Triton-IR programs into efficient machine 
 
 The main challenge posed by our proposed paradigm is that of work scheduling, i.e., how the work done by each program instance should be partitioned for efficient execution on modern GPUs. To address this issue, the Triton compiler makes heavy use of *block-level data-flow analysis*, a technique for scheduling iteration blocks statically based on the control- and data-flow structure of the target program. The resulting system actually works surprisingly well: our compiler manages to apply a broad range of interesting optimization automatically (e.g., automatic coalescing, thread swizzling, pre-fetching, automatic vectorization, tensor core-aware instruction selection, shared memory allocation/synchronization, asynchronous copy scheduling). Of course doing all this is not trivial; one of the purposes of this guide is to give you a sense of how it works.
 
+### Pipelining
+https://drive.google.com/file/d/1NOZ2LIZgHs3UQKCEw3Nv5rrChlX2bzZ0/view?usp=drive_link
+https://www.youtube.com/watch?v=PAsL680eWUw
 
 
 ## [Triton CPU](https://www.youtube.com/watch?v=obGM7nujV00)
@@ -232,12 +241,13 @@ Proton(profiling for Triton)
 
 ## 总结
 
+Triton 的流水编排控制不够。如果要保持当前的应用性，要么硬件需要加更多的流水辅助能力。要么就要让Triton的抽象层次低一些暴露更多控制的能力。
+
 Triton has trouble maintaining both 80% SoL and portability 
 
 Triton does not support multi-CTA well (DSMEM, Hopper/Blackwell) 
 
 Triton/Gluon composition vs C++/Assembly composition
-
 
 
 user want FAST AND EASY gpu programming language. BOTH FAST AND EASY; For a specific task, user decide what's kind of performance is acceptable, then they want to reach that performance goal ASAP. FAST first, then trade productivity for  < 20% perf drop is acceptable. 
@@ -248,8 +258,9 @@ Ascend will have the same problem as Hopper / Blackwell: precise control is need
 
 Autotuning is important for Ascend
 
-People like Python or DSL. Adopt Python-first strategy instead of "we support Python"
+Debugging experiences are important (python/AST/MLIR/LLVMIR/ELF, too many layers to get debuginfo right)
 
+People like Python or DSL. Adopt Python-first strategy instead of "we support Python"
 
 Attention-oriented (or whatever ops trending LLM needs), because that's the most important use case
 

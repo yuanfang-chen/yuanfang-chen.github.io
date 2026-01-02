@@ -5,7 +5,14 @@ categories: CUDA
 typora-root-url: ..
 ---
 
+## Glossary
+
+- **GETT**
+
+  (Generalized Tensor times Tensor contractions) CUTLASS has long provided implementations of Generalized Matrix times Matrix (GEMM) kernels. However, a plethora of workloads compute on higher ranked tensors. Products of such tensors, called tensor contractions, can be executed as multiple batched GEMMs, however, they can be further accelerated with kernels that natively operate on these higher ranked tensors to perform Generalized Tensor times Tensor contractions (GETT). CuTe's hierarchical layouts and CUTLASS 3.0's unified micro-kernels make implementation of GETTs trivial. In this example,  show how CUTLASS 3.0, CuTe, and Hopper's TMA feature together can accelerate GETTs while making the process of authoring custom GETT kernels easier than ever before.
+
 ## Concepts
+
 ### Epilogue
 The above code focuses only on the matrix multiply computation C = AB whose result is held in the registers of each thread within the threadblock. The mapping of logical elements in the output tile to each thread is chosen to maximize performance of the matrix multiply computation but does not result in efficient, coalesced loads and stores to global memory.
 
@@ -89,3 +96,4 @@ Several functions are defined in cutlass/gemm/threadblock_swizzle.h.
 
 - [CUDA Programming Guide: warp matrix functions](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#wmma)
 - [Matrix Multiply Accumulate Instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-instructions-mma)
+

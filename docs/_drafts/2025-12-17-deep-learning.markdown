@@ -6,6 +6,8 @@ categories: CUDA
 typora-root-url: ..
 ---
 
+** Focus and inferencing for recommendation**
+
 ## Overview
 
 A standard feedforward neural network with 3 hidden layers.
@@ -14,7 +16,8 @@ A standard feedforward neural network with 3 hidden layers.
 
 The intermediate layers, called the network’s *hidden layers*, are where most of the learning occurs. It’s the inclusion of *multiple* hidden layers that distinguishes a deep learning model from a “non-deep” neural network, such as a [restricted Boltzmann machine (RBN)](https://developer.ibm.com/tutorials/build-a-recommendation-engine-with-a-restricted-boltzmann-machine-using-tensorflow/) or standard multilayer perceptron (MLP). The presence of multiple hidden layers allows a deep learning model to learn complex hierarchical features of data, with earlier layers identifying broader patterns and deeper layers identifying more granular patterns.
 
-
+## Multilayer Perceptron (MLP)
+This is also known as fully connected or FC.
 
 However, despite practitioners’ effort to train high performing models, neural networks still face challenges similar to other machine learning models—most significantly, overfitting. When a neural network becomes overly complex with too many parameters, the model will overfit to the training data and predict poorly. Overfitting is a common problem in all kinds of neural networks, and paying close attention to [bias-variance tradeoff](https://www.ibm.com/think/topics/bias-variance-tradeoff) is paramount to creating high-performing neural network models.  
 

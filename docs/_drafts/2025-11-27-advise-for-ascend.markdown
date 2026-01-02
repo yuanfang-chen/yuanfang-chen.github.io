@@ -9,6 +9,13 @@ typora-copy-images-to: ../assets/images
 
 ## Find the right problem
 
+## analysis parallism and data reuse
+do a simialr analyais to [MTIA](https://dl.acm.org/doi/abs/10.1145/3579371.3589348) Chapter 3.5 for Ascend
+
+## flexibility
+Architecture and programmming stack should demonstrate sufficient flexibility to support a wide range of models.
+
+DSA不可能灵活到可以在所有模型上都有最优的性能。Meta MTIA 2i采取的方式是牺牲一部分灵活性，保证一部分最重要的模型有最优的性能。
 
 ## Architecture Advise
 
@@ -199,6 +206,19 @@ https://pytorch.org/blog/kernelfalcon-autonomous-gpu-kernel-generation-via-deep-
 
 
 
+## Lessons from MTIA
+MTIA v1
+MTIA 2i
+
+## Lessons from TPU
+
+https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu
+
+like TPU, use CISC instead of RISC?
+
+
+
+More importantly, despite having many more arithmetic units and large on-chip memory, the TPU chip is half the size of the other chips. Since the cost of a chip is a function of the area3 — more [smaller chips per silicon wafer](http://anysilicon.com/die-per-wafer-formula-free-calculators/) and higher yield for small chips since they're less likely to have manufacturing defects***** — halving chip size reduces chip cost by roughly a factor of 8 (23).
 
 
 ## Little's law

@@ -2,16 +2,316 @@
 layout: post
 title:  "MTIA"
 # date:   2025-12-08 11:18:26 -0800
-categories: CUDA
+categories: DSA
 typora-root-url: ..
 mathjax: true
 ---
 
+## Overview
+
+- Meta’s first in-house ML accelerator (May 2023)
+- designed for recommendation systems, specifically Deep Learning Recommendation Models (DLRM)
+- Main goals:
+  - Perf/TCO (datacenter cost)
+  - Generality and programmability
+  - High Dev Efficiency via first-class integration with PyTorch and great support for kernel authoring
+
+![img](/assets/images/MTIA-arch.png)
+
+## DLRM
+Deep Learning Recommendation Models (DLRM) [16] have
+emerged as one of the most dominant workloads in Meta’s
+datacenters [17][18]. These models combine traditional multilayer
+perceptron (MLP) operations (referred to as fully connected or FC
+at times) which are compute intensive, with embedding tables that
+transform sparse features into a dense representation. These tables
+contain wide vectors that are indexed randomly and are reduced to
+a single vector that is then combined with data coming from other
+layers to produce the final results [16]. While embedding table
+operations have rather light compute requirements, their memory
+footprint and bandwidth requirements are rather demanding due to
+the nature of the data access pattern and size of the tables.
+
+While recent generations of GPUs provide a lot of memory
+bandwidth and compute power, they are not designed with
+inference in mind, and therefore the efficiency of processing real
+inference workloads is low. Developers use a myriad of software
+techniques, such as operator fusion, shape specialization, graph
+transformations and kernel optimizations to raise the efficiency of
+GPUs. But despite these efforts, there is still an efficiency gap
+which makes it challenging and expensive to deploy models in
+practice.
+
+While creating a custom silicon solution opens the door for
+ample innovation and specialization towards the target workloads,
+creating an accelerator architecture for mass deployment in the
+datacenter is a monumental task. The focus and strategy when
+architecting the accelerator therefore has been on adopting and
+reusing suitable pieces of technology, as well as tools and
+environments, from vendors and the open-source community.
+This not only improves the time to market, but it also leverages
+the support and enhancements that come from the community and
+vendors and reduces the amount of resources required for
+building, enabling, and deploying such platforms.
+
+## Architecture
+### Command Processor (CP)
+In addition to hosting PE’s local memory and registers, the CP
+block acts as the central processing unit that orchestrates
+execution of various operations on the fixed function blocks
+concurrently. It receives instructions from the two processor cores
+in the PE, performs dependency checking, scheduling, and
+tracking for those instructions, and dispatches them to the fixed
+function units for execution. It contains two separate schedulers
+(one for each processor core), a set of command queues, as well as
+arbitration logic for accessing the local memory and register
+resources.
+The hardware provides a set of basic atomic primitives to
+allow synchronization between the cores (within the PE or across
+multiple PEs). These primitives are enacted by processors, which
+allows atomic update to predefined registers, and can stall the
+processor until certain conditions are satisfied externally (e.g., a
+counter reaches a certain value). At the higher level, these
+mechanisms are used for efficient implementation of software
+constructs such as locks, ticketing locks, mutexes and barriers.
+The logic that performs the atomic operations as well as the
+relevant registers reside within the Command Processor and are
+tightly integrated with the processor cores through custom
+interfaces.
+
+### Processor cores
+Each PE contains two RISC-V cores that run the application’s
+code and issue commands to the CP for offloading various
+computations to fixed function units. The cores are single issue,
+in-order cores, with a five-stage pipeline (AX25-V100, from
+Andes Technology).
+
+One of the processor cores is equipped with the RISC-V vector
+extension, which adds extra flexibility to the PE and allows
+implementing operations that do not map well to the existing fixed
+function units. The vector processing unit contains 32 vector
+registers, each 64B wide and has the same width for all vector
+functional units. It implements version 0.8.1 of the RISC-V vector
+extension [23].
+
+### Local Memory (LS)
+There is an abstraction layer introduced on top of the local
+memories to simplify usage and dependency checking between
+operations that use them. This can be considered as further
+extension of the concept of the buffet [1][2]. Each PE can define
+circular buffers (CBs) that are mapped to the existing local
+memory. Each CB is designated with an ID and has a pair of
+registers that specify its size (depth) and starting address in the
+local memory. In addition, each CB also implements a set of read
+and write pointers to implement a hardware FIFO.
+
+## Memory Subsystem and Interconnect
+**On-chip SRAM**: In addition to the local memory within the PEs, the accelerator
+also has 128MB of on-chip SRAM, organized as slices around the
+grid. This on-chip memory can be used as addressable scratchpad
+memory, or as a common, shared, memory-side cache. There are
+four LPDDR5 controllers on each side of the grid, providing a
+total of 176 GB/s (theoretical) off-chip bandwidth. The
+accelerator can support a total of 128GB of off-chip memory
+capacity. Memory addresses are distributed across these
+controllers, and among the on-chip SRAM slices. When on-chip
+SRAM is configured as cache, each four cache slices are
+associated with a single memory controller and cache its
+addresses.
+
+**Multicating**: The on-chip network that connects all the PEs and memories
+together is based on the AXI interconnect with special
+enhancements. The interconnects consist of two networks for
+carrying memory and register accesses separately. The memory
+access network is equipped with a multicast feature which allows
+coalescing of requests from multiple PEs into one (if they are
+made to the same set of addresses). A single request is then sent to
+the memory blocks to retrieve the data and return it to all
+requesting PEs. Multicast is only supported for the PEs that are
+located along the same row or column in the grid however, and
+cannot be used for an arbitrary group of PEs.
+**This is for sub-A tensor to be broadcast to multiple PEs in a row.
+
+**Reduction**:  In addition to the main AXI based interconnect, PEs are also
+connected to each other via a specialized network, called the
+reduction network. This is a unidirectional network that travels
+only from north to south and from west to east. It carries partial
+sums from the accumulators in the RE block of one PE to another.
+Using this network, PEs can expediently accumulate the result of
+their computation without having to save and restore it in
+memory. The last PE in the row or column can then store the final
+result in the memory, after all partial values are accumulated.
+**this is for split-k**
+
+## Parallelism and Data Reuse
+Parallelism: The architecture provides support for multiple
+levels of parallelism and overlapping of various operations. Data
+level parallelism (DLP) is exploited by usage of wide vectors in
+fixed function units as well as the vector processors. Multiple PEs
+also can operate on the same task in a data parallel manner.
+Instruction level parallelism is exploited in the Command
+Processor, by allowing multiple outstanding operations to be
+handled by different fixed function blocks simultaneously.
+Memory level parallelism (MLP) is achieved by allowing many
+outstanding requests to on-chip and off-chip memories from each
+PE. And finally, thread level parallelism (TLP) can be achieved
+by utilizing multiple PEs (or groups of PEs) to run parallel
+threads, as well as by having two independent threads within each
+PE. Threads within the PE can cooperate in performing a given
+task, by one thread orchestrating the data movement and the other
+one orchestrating the computation.
+
+## Matmul Mapping
+
+![img](/assets/images/matmul-on-MTIA.png)
+- **across-PE**: use Multicasting to load A/B; use reduction to split-k
+- **inside-PE**: pipelining with DMA/LS/CB and multithreading.
+
+```txt
+#--------------------------------Core0-------------------------------------
+work = GetWorkForMyPE(...)
+INIT CB_A, CB_B and CB_C # Setup circular buffers
+multicast_A, multicast_B = JoinMulticastGroup(...)
+Sync(...) # Synchronize with others
+read_B = true
+for m in range(work.m.begin, work.m.end, 64): # For every row of “A”...
+read_A = true
+for n in range(work.n.begin, work.n.end, 64): # ...read entire “B”
+for k in range(work.k.begin, work.k.end, 32):
+if read_A:
+DMA GetAddr(A, (m, k)), size=(64,32), CB_A, multicast_A
+if read_B:
+DMA GetAddr(B, (n, k)), size=(64,32), CB_B, multicast_B
+read_A = false
+read_B = false
+#--------------------------------Core1-------------------------------------
+work = GetWorkForMyPE(...)
+Sync(...) # Synchronize with others
+for m in range(work.m.begin, work.m.end, 64): # For every two chunks of “A”
+cb_offset_B = 0
+for n in range(work.n.begin, work.n.end, 64):# Multiply two chunks of “B”
+cb_offset_A = 0
+INIT RE acc with 0 # Initialize accumulators
+for k in range(work.k.begin, work.k.end, 32):
+MML acc=0,size=(32,32,32),CB_B,CB_A,cb_offset_B ,cb_offset_A
+MML acc=1,size=(32,32,32),CB_B,CB_A,cb_offset_B ,cb_offset_A+32*32
+MML acc=2,size=(32,32,32),CB_B,CB_A,cb_offset_B+32*32,cb_offset_A
+MML acc=3,size=(32,32,32),CB_B,CB_A,cb_offset_B+32*32,cb_offset_A+32*32
+if ((m + 64) >= work.m.end): # If last Iteration...
+POP CB_B, size=2*32*32 # ...mark “B” data as consumed
+else: # Otherwise...
+cb_offset_B += 2*32*32 # ...proceed to the next chunk
+if ((n + 64) >= work.n.end): # If last Iteration...
+POP CB_A, size=2*32*32 # ...mark “A” data as consumed
+else: # Otherwise...
+cb_offset_A += 2*32*32 # ...proceed to the next chunk
+REDUCE destination = neighbor PE or CB_C, size=(64,64))# Send to next PE
+if IsLastPEInReduction(...): # If last PE in sequence
+DMA PutAddr(C, (n, m)), size=(64, 64), CB_C # Write result to memory
+```
+
+## Programming
+
+Compilers: The next important component in the software
+stack is a set of compilers which consists of multiple parts:
+• A PyTorch FX-based ML model compiler which applies
+several transformations and model-level optimizations to the
+PyTorch graph represented as FX IR [19][20], and gradually
+converts it into LLVM IR [21][22]. It is responsible for graph
+optimizations which take advantage of the PE grid and MTIA’s
+memory subsystem. It implements a tensor placement scheme that
+takes a best-effort approach to keep producer-consumer data in
+on-chip memory. It can also split a model into sub-graphs
+intended to run across multiple cards and even across sub-grids
+within the same chip.
+• A DSL-based compiler (codename KNYFE) for ML kernel
+development, which takes a short high-level description of an ML
+kernel and produces low-level optimized C++ code. It uses low-
+level hardware specific APIs to implement the ML operator and is
+used extensively for developing many of the ML kernels used in
+MTIA.
+• LLVM-based compiler toolchain which converts LLVM IR
+into an executable for the device. LLVM is used primarily due to
+the RISC-V support it provides and is responsible for the lowest
+level of optimizations like register allocation, in-lining and code
+generation. Most major optimizations like tiling or scheduling of
+the work and data among PEs are performed by the higher-level
+compilers mentioned earlier.
+Library of ML kernels: Another important component is the
+library of kernels and ML operators that are used to construct the
+ML models executing on the device. Many of these kernels are
+developed using the DSL compiler mentioned earlier, but some of
+the most performance demanding kernels, e.g., fully connected
+(FC) layers and embedding bag (EB) layers, are developed by
+experts directly in low-level C++ using exposed intrinsics to
+ensure they can achieve the highest levels of performance possible
+on the hardware.
+
+## Model Performance
+ For medium complexity models, MTIA
+still sees an efficiency gain over the GPU, but it is lower because
+FCs are less dominant, and the GPU software stack provides more
+efficient implementations of other operators (with TBE and
+aggressive operator fusion).
+
+## Lessons Learned
+**General-Purpose Compute**: Addition of general-purpose
+compute in the form of RISC-V vector support proved to be a
+judicious choice: There were operators which were developed or
+gained importance after the architecture definition phase, and
+hence the architecture did not include any offload support for
+them. Operators like LayerNorm and BatchedReduceAdd were
+straightforward to implement with vectors, and these
+implementations proved superior to versions using scalar cores
+and fixed function units.
+
+**Automated Code Generation**: Some of the architectural
+choices made regarding how the fixed function units are
+integrated and operated in the PE have made the automatic code
+generation by compiler difficult. Processor cores must assemble
+and issue explicit commands to operate any of the fixed-function
+blocks. While this is done through addition of custom instructions
+and registers to the processors, it still requires assembling and
+passing many parameters to each offload engine to specify the
+details of the operation. Controlling a heterogenous set of fixed-
+function units from within the program and balancing the data
+flow between them is a challenging problem for the compiler.
+Achieving desired levels of utilization on the fixed-function
+blocks across various input shapes and sizes is also difficult.
+While our DSL-based KNYFE compiler makes it easier to write
+kernels and handles many of these issues automatically, it requires
+learning a new DSL.
+
+**Architecture Hierarchy**: Recommendation models for the
+accelerator vary greatly in size and complexity in the layers and
+operators they employ. While large layers when mapped on the
+PE grid can extract desired utilization level from available
+hardware resources and amortize the overhead of job creation and
+dispatch, the smaller layers or lower batch sizes have to resort to
+techniques such as exploiting sub-graph parallelism and fusion to
+get to the same level of utilization. Even though there is plenty of
+room at the software level to perform such optimizations or
+reduce the overheads of deploying jobs, we believe some
+provisioning at the architecture level would have made addressing
+this problem easier. This is because for smaller jobs the grid must
+be divided into smaller sub-grids so that each can handle a smaller
+job, and the task of setting up and tearing down these sub-grids is
+part of the system’s firmware. We believe having another level of
+hierarchy in the architecture itself, for example clusters of PEs,
+might have made this problem easier to solve as it provides
+natural units of isolation and management, compared to a
+monolithic grid of PEs.
 
 
-[Triton for MTIA - Triton Developer Conference](https://docs.google.com/presentation/d/1Cd-X30A7c4sdjoK20GdEsDV3qHm9jglD/edit?usp=sharing&ouid=109270351505023978769&rtpof=true&sd=true)
+## Renferences
+- [Triton for MTIA - Triton Developer Conference](https://docs.google.com/presentation/d/1Cd-X30A7c4sdjoK20GdEsDV3qHm9jglD/edit?usp=sharing&ouid=109270351505023978769&rtpof=true&sd=true)
+- https://ai.meta.com/blog/meta-training-inference-accelerator-AI-MTIA/
+- https://ai.meta.com/blog/next-generation-meta-training-inference-accelerator-AI-MTIA/
+- https://www.youtube.com/watch?v=kO4a75fKDF4
 
+- [Deep Learning Recommendation Model for Personalization and Recommendation Systems](https://arxiv.org/abs/1906.00091)
+- [The Architectural Implications of Facebook’s DNN-based Personalized Recommendation]()
+- [Deep Learning Inference in Facebook Data Centers: Characterization, Performance Optimizations and Hardware Implications](https://arxiv.org/abs/1811.09886)
+- https://research.nvidia.com/publication/2019-04_buffets-efficient-and-composable-storage-idiom-explicit-decoupled-data
 
-
-https://ai.meta.com/blog/meta-training-inference-accelerator-AI-MTIA/
 
