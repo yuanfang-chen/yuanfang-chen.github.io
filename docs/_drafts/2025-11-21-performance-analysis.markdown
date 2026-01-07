@@ -21,6 +21,14 @@ mathjax: true
 - **假设：问题大小不变，增加计算资源**
 - 它指出，程序的加速比受到其**串行部分**所占比例的限制。即使可以无限增加并行处理器的数量，串行部分的处理时间也无法缩短，从而限制了整体性能的提升。
 
+The fact that the level of speedup that one can achieve through
+
+parallel execution can be severely limited by the parallelizable portion of the appli-
+
+假设一个应用只有30%的执行时间可以并行执行，即使计算机有无限并行度，最多也只能优化30%的执行时间。
+
+lesson learned: 应用的并行度有决定性作用。
+
 ### Gustafson's law
 
 - 作为对 Amdahl 定律的补充，该定律由 John Gustafson 和 Edwin Barsis 提出。

@@ -133,7 +133,7 @@ CUBLASLt（cuBLAS Light）是 NVIDIA cuBLAS 库的一个轻量级、灵活且高
     ```
 
 ## 特性
-## Epilogue融合
+### Epilogue融合
 支持 BIAS, RELU, GELU, SCALE, RESIDUAL 等，减少 kernel launch 次数
 
 下面是一个 使用 cuBLASLt 实现带 Epilogue 融合的 GEMM 示例，具体实现：
@@ -267,6 +267,11 @@ int main() {
     return 0;
 }
 ```
+
+### AMAX
+
+https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/
+
 
 ## Python Bindings
 https://docs.nvidia.com/cuda/nvmath-python/0.5.0/bindings/cublasLt.html

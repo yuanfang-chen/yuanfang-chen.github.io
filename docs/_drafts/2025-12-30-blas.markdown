@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "BLAS总结"
+title:  "BLAS & cuBLAS总结"
 # date:   2025-12-08 11:18:26 -0800
 categories: ML
 typora-root-url: ..

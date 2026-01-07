@@ -1,4 +1,15 @@
+---
+flayout: post
+title:  "Homebrew总结"
+# date:   2025-12-08 11:18:26 -0800
+categories: other
+typora-root-url: ..
+---
+
+
+
 ## xx
+
 man brew
 
 ## Glossary

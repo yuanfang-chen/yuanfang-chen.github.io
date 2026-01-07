@@ -432,6 +432,10 @@ cuBLASDx（cuBLAS Device Extensions）是 NVIDIA 在 CUDA Toolkit 11.0+ 中引�
     }
     ```
 
+## Pipeline API
+
+TODO
+
 ## 完整示例
 
 ```cpp

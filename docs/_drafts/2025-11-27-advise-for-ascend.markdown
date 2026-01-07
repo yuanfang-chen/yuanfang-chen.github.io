@@ -7,6 +7,69 @@ typora-root-url: ..
 typora-copy-images-to: ../assets/images
 ---
 
+ HW的生态位置
+	支撑自己的AI需求
+	拓展生态，多卖卡
+
+CANN相关的文档全部使用Sphinx
+
+## Python-first
+
+- easy to learn
+- no Compilation
+- better integrated with pytorch etc. (DL framework)
+- better debug (no screens and screens of template errors like C++ does)
+- must have same perf as C++ 
+
+## why tile-based programmming is succesful
+
+
+
+## CCCL for SIMT
+
+write parallel code like CPU code
+
+## CANN编程必须是一个体系
+
+需要成体系的库，让内部开发者优化的库，固化成可以复用的库
+https://www.nvidia.com/en-us/on-demand/session/gtc25-s72383/
+
+比喻：建一个漂亮的高楼大厦，即使地基暂时不稳，但是也可以
+
+## task parallism
+
+> Task Parallelism vs. Data Parallelism
+> Data parallelism is not the only type of parallelism used in parallel pro-
+> gramming. Task parallelism has also been used extensively in parallel
+> programming. Task parallelism is typically exposed through task decom-
+> position of applications. For example, a simple application may need
+> to do a vector addition and a matrix-vector multiplication. Each of these
+> would be a task. Task parallelism exists if the two tasks can be done
+> independently. I/O and data transfers are also common sources of tasks.
+> In large applications, there are usually a larger number of independent
+> tasks and therefore larger amount of task parallelism. For example, in a
+> molecular dynamics simulator, the list of natural tasks includes vibrational
+> forces, rotational forces, neighbor identification for non-bonding forces,
+> non-bonding forces, velocity and position, and other physical properties
+> based on velocity and position.
+> In general, data parallelism is the main source of scalability for par-
+> allel programs. With large datasets, one can often find abundant data
+> parallelism to be able to utilize massively parallel processors and allow
+> application performance to grow with each generation of hardware that
+> has more execution resources. Nevertheless, task parallelism can also
+> play an important role in achieving performance goals. We will be cover-
+> ing task parallelism later when we introduce streams.
+
+提高AI Core利用率需要使能task parallism
+
+## Green Context
+
+To address the needs of "AI Factories," CUDA 13 introduced Green Contexts.
+
+This allows developers to partition a single GPU into deterministic, isolated resource pools at the hardware level (Streaming Multiprocessor groups).
+
+This is critical for latency-sensitive applications where you need to guarantee that a high-priority task isn't "starved" by a massive background batch process.
+
 ## Find the right problem
 
 ## analysis parallism and data reuse
