@@ -69,15 +69,13 @@ def add_kernel(a_ptr, b_ptr, c_ptr, n, BLOCK_SIZE: tl.constexpr):
     tl.store(c_ptr + offsets, output, mask=mask)
 ```
 
-1. Triton is an intermediate language and compiler designed to overcome the limitations of existing vendor libraries for novel Deep Learning primitives by enabling efficient, portable implementations of tiled neural network computations.
-2. Triton is tile-based (tile is small rectangular sub-section of a tensor). In contrast, XLA is based on tensor, developers can not manipulate sub-tensor.
+1. Triton 是一种中间语言及编译器，其设计初衷是通过实现**基于分块的神经网络计算**的高效可移植方案，突破现有厂商库在新型深度学习算子上的局限性。
+2. Triton 采用分块架构（这里的 “分块” 指张量中一个小型的矩形子区域）。相比之下，XLA 基于完整张量运行，开发者无法对其子张量进行操作。
 3. Triton是一种取舍 :  portability / productivity / efficiency
 4. Triton 开创了Tile编程，但和CUDA一样，还是SPMD
-  	![download](./assets/images/download.png)
+   ![download](./assets/images/download.png)
 5. Triton的性能预期：高下限，低上限，低指 > 80% SoL
 6. Triton支持的硬件: GPU, CPU, Accelerator
-
-The system introduces Triton-C, a C-like language for expressing tensor programs with parametric tile variables, an LLVM-based Triton-IR for tile-level analysis, and a Triton-JIT compiler that leverages novel optimization passes and an auto-tuner for efficient GPU code generation.
 
 
 ![Screenshot 2025-12-25 at 2.26.44 PM](/assets/images/Screenshot 2025-12-25 at 2.26.44 PM.png)
@@ -86,7 +84,7 @@ The system introduces Triton-C, a C-like language for expressing tensor programs
 
 ## Triton的未来目标
 
-If you say a model is running at "80% of SoL," it means the code is achieving 80% of the maximum theoretical throughput that the hardware (like an NVIDIA H100 GPU) can physically handle.
+如果说某一模型的运行效率达到 “理论性能上限的 80%”，意思就是该模型对应的代码，实现了硬件（如英伟达 H100 显卡）物理层面可承载的最大理论吞吐量的 80%。
 
 ![Screenshot 2025-12-24 at 6.52.37 PM](/assets/images/Screenshot 2025-12-24 at 6.52.37 PM.png)
 
@@ -139,7 +137,7 @@ The Triton-JIT compiles and optimizes Triton-IR programs into efficient machine 
 
 - **Machine-Independent Passes**:
 **Pre-Fetching**: Automatically detects loops and inserts prefetching code to hide memory latency.
-**Tile-Level Peephole Optimization**: Simplifies chains of tile operations using algebraic properties (e.g., \\(X = (X^T)^TX=(XT)TX = (X^T)^TX=(XT)T)\\).
+**Tile-Level Peephole Optimization**: Simplifies chains of tile operations using algebraic properties (e.g., $$X = (X^T)^TX=(XT)TX = (X^T)^TX=(XT)T)$$.
 
 - **Machine-Dependent Passes**: These passes are designed for GPU architectures with hierarchical memory.
   - **Hierarchical Tiling**: Decomposes tiles into micro-tiles and nano-tiles to map computations optimally to the hardware's compute capabilities and memory hierarchy. The structure of Triton-IR allows automatic enumeration and optimization of nested tiling configurations.
@@ -151,11 +149,24 @@ The Triton-JIT compiles and optimizes Triton-IR programs into efficient machine 
 
 - **Auto-tuner**: Optimizes meta-parameters associated with the optimization passes (e.g., tiling parameters). In this work, it uses an exhaustive search over powers of two for tile, micro-tile, and nano-tile sizes.
 
-## Challlenges
+## 早期挑战
 
-The main challenge posed by our proposed paradigm is that of work scheduling, i.e., how the work done by each program instance should be partitioned for efficient execution on modern GPUs. To address this issue, the Triton compiler makes heavy use of *block-level data-flow analysis*, a technique for scheduling iteration blocks statically based on the control- and data-flow structure of the target program. The resulting system actually works surprisingly well: our compiler manages to apply a broad range of interesting optimization automatically (e.g., automatic coalescing, thread swizzling, pre-fetching, automatic vectorization, tensor core-aware instruction selection, shared memory allocation/synchronization, asynchronous copy scheduling). Of course doing all this is not trivial; one of the purposes of this guide is to give you a sense of how it works.
+The main challenge posed by our proposed paradigm is that of work scheduling, i.e., how the work done by each program instance should be partitioned for efficient execution on modern GPUs. To address this issue, the Triton compiler makes heavy use of *block-level data-flow analysis*, a technique for scheduling iteration blocks statically based on the control- and data-flow structure of the target program. The resulting system actually works surprisingly well: our compiler manages to apply a broad range of interesting optimization automatically (e.g., **automatic coalescing, thread swizzling, pre-fetching, automatic vectorization, tensor core-aware instruction selection, shared memory allocation/synchronization, asynchronous copy scheduling**). Of course doing all this is not trivial; one of the purposes of this guide is to give you a sense of how it works.
 
-### Pipelining
+## 当前挑战 Pipelining
+
+Hand-fused loops in matmul kernel, multitude of functional and performance problems
+● Matmul optimized path not ready for branching in the
+main loop
+	■ WGMMA pipelining 💀
+	■ Layout conversion optimizations 😵
+	■ Axis Analysis 🪦
+
+● IfOp placement in the loop - major performance problem
+	■ Placed in the middle of the loop
+	■ Instruction scheduling off the window
+	■ Introduced CoarseSchedule, allowing for better control over ops placement
+
 https://drive.google.com/file/d/1NOZ2LIZgHs3UQKCEw3Nv5rrChlX2bzZ0/view?usp=drive_link
 https://www.youtube.com/watch?v=PAsL680eWUw
 
@@ -221,7 +232,7 @@ https://github.com/triton-lang/triton/blob/167bdc81e7b563433fa65980eed4f609a727c
 
 - Kernels are becoming more complex
 - Hardware is gaining more degrees of freedom
-- As the tensor core programming becomes increasingly complex: warp-specialization, async MMA, async TMA, it becomes very hard for triton compiler to find a optimal schedule to maximize performance. Hence more control of schedule should be exposed to the deveropers so that they could express the schedule easily, then triton compiler could do the rest.
+- As the tensor core programming becomes increasingly complex: **warp-specialization, async MMA, async TMA, it becomes very hard for triton compiler to find a optimal schedule to maximize performance.** Hence more control of schedule should be exposed to the deveropers so that they could express the schedule easily, then triton compiler could do the rest.
 
 Concrete problems:
 - Optimal tensor layout assignment in registers and in memory
@@ -232,12 +243,8 @@ Concrete problems:
 
 ### Gluon和Triton的异同
 
-* 相同：保持tile编程模型
+* 相同：保持tile编程模型，保持SPMD
 * 不同：Gluon对开发者开放控制权:  1. 布局 2. 调度 3. 内存
-
-
-
-
 
 ### Gluon简介
 
@@ -277,10 +284,6 @@ Triton linear layout is target-independent. Before, Triton's layout representati
 
 > While both CUTE and linear layouts aim to address the challenge of flexible task mapping on emerging architectures, they differ in several key aspects. First and foremost, CUTE is primarily designed for users to manually describe layouts, whereas linear layouts are integrated into a compiler. Second, the linear algebra framework of linear layouts enables compilers to generate efficient code for layout conversion and code lowering for many common operators, which is absent in CUTE. Third, swizzling is inherently defined within linear layouts, whereas in CUTE, it is treated as a separate step
 
-
-
-
-
 https://www.lei.chat/posts/triton-compiler-development-tips/
 
 ## [Liger Kernel](https://pytorch.org/blog/peak-performance-minimized-memory/)
@@ -290,7 +293,7 @@ Liger Kernel is an open source library of optimized Triton kernels designed to e
 
 ## [Triton-Distributed](https://triton-distributed.readthedocs.io/en/latest/)
 
-
+TODO
 
 ## [Profiling](https://youtu.be/PGUw2P55ZYM?si=fawMOhJq-BwTO9DR)
 Proton(profiling for Triton)
