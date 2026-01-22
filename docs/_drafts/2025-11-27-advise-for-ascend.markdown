@@ -13,6 +13,28 @@ typora-copy-images-to: ../assets/images
 
 CANN相关的文档全部使用Sphinx
 
+
+
+学习Groq LPU, Deterministic execution
+
+> ## Execution Model: Static Scheduling
+>
+> GPU architectures rely on dynamic scheduling - hardware queues, runtime arbitration, and software kernels that introduce non-deterministic latency. During collective operations, when hundreds of cores must synchronize activation tensors, any delay propagates through the entire system.
+
+compiler-defined (co-design)
+
+> Our compiler pre-computes the entire execution graph, including inter-chip communication patterns, down to the individual clock cycles. This static scheduling eliminates:
+
+- Cache coherency protocols
+- Reorder buffers
+- Speculative execution overhead
+- Runtime coordination delays
+
+> Software-Scheduled Network: RealScale Chip-to-Chip Interconnect
+> Groq uses a plesiosynchronous, chip-to-chip protocol to cancel natural clock drift and align hundreds of LPUs to act as a single core. The SW compiler then can predict exactly when data will arrive, so developers can reason about timing. Periodic software sync adjusts for crystal-based drift, enabling not just compute scheduling but also network scheduling. This lets Groq operate like a single-core supercluster, sidestepping complex coordination problems found in traditional architectures by starting with the compiler.
+
+![img](./assets/images/df308eef891cc2f8811be4e05b10561b81247747-1280x720.gif)
+
 ## Python-first
 
 - easy to learn
@@ -21,7 +43,62 @@ CANN相关的文档全部使用Sphinx
 - better debug (no screens and screens of template errors like C++ does)
 - must have same perf as C++ 
 
+## ML architecture & NPU codesign
+
+Using ML TO TAILOR THE DNN TO
+THE TPU AND THE TPU TOPOLOGY TO
+THE DNN
+To enable Pareto-optimizations over quality and performance for
+DNN models, we developed platform-aware neural architecture
+search (PA-NAS) at scale to tailor DNN models for TPU v4
+supercomputers automatically [32]. A PA-NAS designed CNN1
+achieves ~1.6X better performance (QPS and latency) than the
+baseline designed by generic NAS, with comparable accuracy [32].
+Unlike [33], here we show how PA-NAS improved the
+performance of DLRM0 on TPU v4.
+
+
+
+"TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings"
+
+
+
+"The first concern of a DSA after its compiler is the memory system" 
+
+Dally, W.J., Turakhia, Y. and Han, S., 2020. Domain-specific
+hardware accelerators. Communications of the ACM, 63(7), 48-57.
+
+
+
+https://medium.com/@harishsingh8529/latency-vs-predictability-the-hidden-tradeoff-powering-modern-systems-98f4952b7415
+
+
+
 ## why tile-based programmming is succesful
+
+## use agile hardware development
+
+## performance-counters are important
+
+Pitfall: Performance counters added as an afterthought for DSA hardware.
+
+The TPU has 106 performance counters, and the designers wanted even more (see
+Figure 7.45). The raison d’^ etre for DSAs is performance, and it is way too early in
+their evolution to have a good idea about what is going on.
+
+
+
+Workload analysis features. Building upon lessons
+from TPUv1 [21], TPUv4i includes extensive tracing and
+performance counter hardware features, particularly in the
+uncore. They are used by the software stack to measure and analyze system-level bottlenecks in user workloads and
+guide continuous compiler-level and application-level
+optimizations (Figure 2). These features increase design
+time and area, but are worthwhile because we aim for Perf/
+TCO, not Perf/CapEx ③. The features enable significant
+system-level performance improvements and boost
+developer productivity over the lifetime of the product as
+DNN workloads grow and evolve (see Table 4)
 
 
 

@@ -9,11 +9,55 @@ mathjax: true
 
 ## 数学
 
+
+A millisecond is 1/1000 of a second (.001 seconds). There are 1000 milliseconds in a second.
+A microsecond is 1/1000000 of a second (.000001 seconds). There are one million milliseconds in a second.
+A nanosecond is 1/1000000000 of a second (.000000001 seconds). There are one billion nanoseconds in a second.
+
+## 功耗
+
+The Formula
+Power (Watts) = Energy (Joules) / Time (Seconds) 
+Examples
+If 100 Joules are used in 10 seconds, the power is 10 Watts (100 J / 10 s = 10 W).
+If 1000 Joules are used in 5 seconds, the power is 200 Watts (1000 J / 5 s = 200 W). 
+Key Difference
+Joules (J) measure total energy.
+Watts (W) measure the rate of energy use (power).
+1 Watt = 1 Joule per second (1 J/s).
+
+
+
+|           Submultiples            | Multiples |                |        |           |               |
+| :-------------------------------: | :-------: | :------------: | :----: | :-------: | :-----------: |
+|               Value               | SI symbol |      Name      | Value  | SI symbol |     Name      |
+|            $$10^−1$$ J            |    dJ     |   decijoule    | 101 J  |    daJ    |   decajoule   |
+|              10−2 J               |    cJ     |   centijoule   | 102 J  |    hJ     |  hectojoule   |
+|              10−3 J               |  **mJ**   | **millijoule** | 103 J  |  **kJ**   | **kilojoule** |
+|              10−6 J               |  **μJ**   | **microjoule** | 106 J  |  **MJ**   | **megajoule** |
+|              10−9 J               |  **nJ**   | **nanojoule**  | 109 J  |  **GJ**   | **gigajoule** |
+|              10−12 J              |  **pJ**   | **picojoule**  | 1012 J |  **TJ**   | **terajoule** |
+|              10−15 J              |    fJ     |   femtojoule   | 1015 J |    PJ     |   petajoule   |
+|              10−18 J              |    aJ     |   attojoule    | 1018 J |    EJ     |   exajoule    |
+|              10−21 J              |    zJ     |   zeptojoule   | 1021 J |    ZJ     |  zettajoule   |
+|              10−24 J              |    yJ     |   yoctojoule   | 1024 J |    YJ     |  yottajoule   |
+|              10−27 J              |    rJ     |   rontojoule   | 1027 J |    RJ     |  ronnajoule   |
+|              10−30 J              |    qJ     |  quectojoule   | 1030 J |    QJ     |  quettajoule  |
+| Common multiples are in bold face |           |                |        |           |               |
+
+
+
+
 ### [幂定律](https://zh.wikipedia.org/wiki/%E5%86%AA%E5%AE%9A%E5%BE%8B)
 
 
 
 ## 定律
+
+## Moore's law
+
+## Dennard scaling
+
 
 ### Amdahl's law
 
@@ -55,11 +99,26 @@ lesson learned: 应用的并行度有决定性作用。
 
 ### huang’s law
 
+## Parallelism
 
+There are the three fundamental types of
+parallelism that improve the training time of DNNs:
+
+1. Data Parallelism: Each chip computes the forward and
+backward pass on a subset of examples, and sends the gradients
+that it calculates for its subset to the other chips.
+2. Model (or Tensor) Parallelism: Large tensor operations
+and their weights are divided across multiple chips, so that each
+chip simultaneously computes a subset of a tensor operation.
+3. Pipeline Parallelism: For a DNN with many layers, each
+chip computes a subset of layers, and communicates the layer
+results to chips holding the adjacent layers.
 
 ## 指标
 
-### TOPS (On-Device AI)
+### SLO
+
+### TOPS (On-Device AI) (inference)
 
 **TOPS (Trillions of Operations Per Second)** measures **Inference**. This is how your laptop or phone runs an existing AI model (like live translation, background blur, or a local LLM like Llama 3) efficiently without draining your battery.
 
@@ -70,7 +129,7 @@ lesson learned: 应用的并行度有决定性作用。
 | **Intel Lunar Lake**    | **48 TOPS**  | Best for "Total Platform TOPS" (combining CPU + GPU + NPU) for complex agentic tasks. |
 | **AMD Ryzen AI 300**    | **50 TOPS**  | The favorite for local gaming AI and heavy multi-threaded creative work. |
 
-### FLOPS
+### FLOPS (training)
 
 **FLOPS (Floating Point Operations Per Second)** measures **Precision**. This is used by NVIDIA and Google to train the next generation of "Frontier Models" (GPT-5, Gemini 2, etc.). Since training requires high math accuracy, we measure it in **PetaFLOPS** ($10^{15}$ operations).
 

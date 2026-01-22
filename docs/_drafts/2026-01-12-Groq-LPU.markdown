@@ -1,0 +1,4 @@
+Singh, Satnam (February 11, 2022). "The Virtuous Cycles of Determinism: Programming Groq's Tensor Streaming Processor". Proceedings of the 2022 ACM/SIGDA International Symposium on Field-Programmable Gate Arrays. p. 153.
+
+[A Software-defined Tensor Streaming Multiprocessor forLarge-scale Machine Learning](https://dl.acm.org/doi/10.1145/3470496.3527405)
+

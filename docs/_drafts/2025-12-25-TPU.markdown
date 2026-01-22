@@ -7,19 +7,535 @@ typora-root-url: ..
 mathjax: true
 ---
 
+## Fundamental Energy-Performance Relationship
+
+$$
+\text{Power} = \frac{\text{Energy}}{\text{Operation}} \times \frac{\text{Operations}}{\text{Second}}
+$$
+
+左边是一个指令消耗的能源; 右边是性能。
+
+并行可以在一定范围内，小幅度减少左边，大幅度增加右边。但是**边际效益递减**
+
+方向在于考察应用程序基本操作所消耗的能量成本。必须同时考虑所需的计算操作，内存访问和通信操作
+
+方向在DSA（举例：手机内各种DSA，手表等等IoT设备）
+
+<img src="./assets/images/image-20260120111957555.png" alt="image-20260120111957555" style="zoom: 67%;" />
+
+
+
+
+
+**Overhead reduction.** Overhead reduction is an important aspect of specialization. Even a simple in-order processor spends over 90% of its energy on *overhead*: instruction fetch, instruction decode, data supply, and control.[10](https://cacm.acm.org/research/domain-specific-hardware-accelerators/#R10) A modern out-of-order processor spends over 99.9% of its energy on overhead[51](https://cacm.acm.org/research/domain-specific-hardware-accelerators/#R51) adding costs for branch prediction, speculation, register renaming, and instruction scheduling. Performing a 32-b integer add takes only 63 fJ in 28nm CMOS.[24](https://cacm.acm.org/research/domain-specific-hardware-accelerators/#R24) Performing an integer add instruction on a 28nm ARM A-15 takes over 250pJ,[51](https://cacm.acm.org/research/domain-specific-hardware-accelerators/#R51) about 4000x the energy of the add itself.
+
+
+
+The high energy and area costs of instruction and data supply overhead motivate complex instructions. The energy of a single add operation is swamped by the instruction overhead energy. A complex instruction, such as the matrix-multiply-accumulate instruction (HMMA) of the NVIDIA Volta V100,[4](https://cacm.acm.org/research/domain-specific-hardware-accelerators/#R4) on the other hand, performs 128 floating-point operations in a single instruction and thus has an operation energy that is many times the instruction overhead. Using complex, specialized instructions, one can build efficient, specialized, programmable computer systems. We revisit the concept of complex, specialized instructions later.
+
+
+
+Memory Dominates Accelerators
+
+![t1](./assets/images/t1.jpg)
+
+Balancing Specialization and Generality: accelerate domain, not accelerate application
+
+
+
+The core methodology for achieving DSA gains is detailed through four main techniques:
+
+Data Specialization: This involves tailoring hardware operations for domain-specific data types, allowing complex inner-loop functions to be performed in a single cycle with minimal area and power. For example, the Smith-Waterman algorithm, used in genome analysis, involves recurrence equations:
+I(i, j) = \max \{H (i, j – 1) – o, I (i, j – 1) – e\}I(i,j)=max⁡{H(i,j–1)–o,I(i,j–1)–e}I(i, j) = \max \{H (i, j – 1) – o, I (i, j – 1) – e\}I(i,j)=max{H(i,j–1)–o,I(i,j–1)–e}
+D(i, j) = \max \{H (i–1, j)–o, D (i–1, j)–e\}D(i,j)=max⁡{H(i–1,j)–o,D(i–1,j)–e}D(i, j) = \max \{H (i–1, j)–o, D (i–1, j)–e\}D(i,j)=max{H(i–1,j)–o,D(i–1,j)–e}
+H(i,j) = \max \{0, I(i,j), D(i,j), H(i-1,j-1) + W(r[i],q[j])\}H(i,j)=max⁡{0,I(i,j),D(i,j),H(i−1,j−1)+W(r[i],q[j])}H(i,j) = \max \{0, I(i,j), D(i,j), H(i-1,j-1) + W(r[i],q[j])\}H(i,j)=max{0,I(i,j),D(i,j),H(i−1,j−1)+W(r[i],q[j])}
+On a conventional x86 CPU, each iteration takes about 37 cycles and consumes 81 nJ. In contrast, the 40 nm Darwin accelerator performs each iteration in a single cycle, achieving a 37\times37×37\times37× speedup and a 26,000\times26,000×26,000\times26,000× reduction in energy (3.1 pJ, with only 0.3 pJ for computation). This is largely due to eliminating the overhead of instruction fetch, decode, and reordering. Specialization also enables efficient data compression; for instance, the EIE accelerator for sparse neural networks stores data in compressed-sparse-column format, along with run-length encoding and codebook compression, leading to 32\times32×32\times32× to 64\times64×64\times64× data compression. This allows weights to fit into energy-efficient on-chip memories, significantly increasing effective off-chip memory bandwidth.
+
+Parallelism: DSAs exploit high degrees of parallelism, often at multiple levels, by specializing synchronization and communication patterns. This simplification leads to very high utilization. The Darwin alignment engine, for example, uses outer-loop parallelism by processing 64 separate alignment problems concurrently with 64 systolic arrays, and inner-loop parallelism within each array where 64 processing elements (PEs) compute matrix elements in parallel along an antidiagonal. This systolic communication ensures nearest-neighbor data flow, simplifying synchronization. This results in 98.5\%98.5%98.5\%98.5% PE utilization and a 4034\times4034×4034\times4034× speedup from parallelism, which is multiplicative with the 37\times37×37\times37× specialization speedup, yielding an overall 150,000\times150,000×150,000\times150,000× acceleration for alignment. In EIE, sparse matrix-vector multiplication is parallelized by partitioning matrix rows across PEs and broadcasting input activations, achieving high PE utilization through load balancing via FIFO queues.
+
+Local and Optimized Memory: DSAs critically rely on small, local memories to supply computation, avoiding bottlenecks from global memory bandwidth. For example, Darwin's 4096 PEs store traceback pointers in 4096 small SRAMs, achieving 2 TBps write bandwidth without relying on global memory. The filtering stage uses 16 dedicated SRAMs for bin counts, removing random accesses from the DRAM stream and enabling sequential access for seed position tables, resulting in 9\times9×9\times9×-24\times24×24\times24× speedup. Data compression (e.g., NVDLA, EIE, SCNN using sparse data structures, run-length encoding, and codebooks) effectively increases local memory capacity and external memory bandwidth by 32\times32×32\times32×-64\times64×64\times64×.
+
+Reduced Overhead: DSAs eliminate the vast majority of energy and area spent on instruction fetch, decode, speculation, and register files inherent in general-purpose CPUs. While a 32-bit integer ADD takes 63 fJ, a 28 nm ARM A-15 consumes 250 pJ for the same operation, a 4000\times4000×4000\times4000× overhead. DSAs, like Darwin and EIE, remove this overhead by hardwiring logic for specific tasks, and often use reduced-precision arithmetic, further saving energy. Complex instructions, such as NVIDIA's HMMA (half-precision matrix multiply-accumulate) and IMMA (integer matrix multiply accumulate), amortize instruction overhead by performing many operations per instruction, achieving high arithmetic energy efficiency (e.g., 77\%77%77\%77% for HMMA).
+
+
+Achieving high speedups with DSAs necessitates codesign—modifying underlying algorithms to exploit hardware specialization. Existing algorithms, tuned for conventional processors and their memory systems, become memory-limited when processing costs approach zero with specialization. They must be refactored to reduce global memory bandwidth demands. Darwin's genomic alignment, for example, shifts from a filtering-heavy approach (GraphMap) to an alignment-heavy one, increasing alignment work 560\times560×560\times560× but benefiting from 150,000\times150,000×150,000\times150,000× alignment acceleration, leading to a net 200\times200×200\times200× speedup. Codesign can also reduce memory footprint, such as using overlapping tiles in the GACT algorithm to make large traceback pointer stores feasible. It can also enable algorithms (e.g., sparse neural networks, gapped extension) that are inefficient on conventional hardware due to high overheads.
+
+## TPU Origin
+
+Starting as far back as 2006, Google engineers had discussions about deploying
+GPUs, FPGAs, or custom ASICs in their data centers. They concluded that the
+few applications that could run on special hardware could be done virtually for free
+using the excess capacity of the large data centers, and it’s hard to improve on free.
+The conversation changed in 2013 when it was projected that if people used voice
+search for three minutes a day using speech recognition DNNs, it would have
+required Google’s data centers to double in order to meet computation demands.
+That would be very expensive to satisfy with conventional CPUs. Google then
+started a high-priority project to quickly produce a custom ASIC for inference
+(and bought off-the-shelf GPUs for training). The goal was to improve cost-
+performance by 10 over GPUs. Given this mandate, the TPU was designed, ver-
+ified (Steinberg, 2015), built, and deployed in data centers in just 15 months.
+
+总结：需求是降低TCO，大约等同于降低TDP
+
 ## Motivation
 
 https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu
 
+https://gemini.google.com/share/6c8843e4a51c
 
+## TPU v1: Inference-Only Specialization (2015)
+
+![image-20260119113516107](./assets/images/image-20260119113516107.png)
+
+
+
+![image-20260119113527300](./assets/images/image-20260119113527300.png)
+
+
+
+**Matrix Multiply Unit**
+
+* 256x256 INT8 MACs. (for dense matrices, no sparse support)
+* Read/Write 256 values per clock cycle (matrix multiply or a convolution)
+* matrix multiply乘法结果是16bit
+* accumulator是32bit,   大小4MB=4096x256x32bits  (arithmetic intensity is 1350, round up to 2048, double to 4096 for double buffering)
+* 8-bit weights and 16-bit activations 的乘法降速到 1/2；16-bit weights and 16-bit activations的乘法降速到 1/4
+* holds one 64 KiB tile of weights plus one for double buffering (to hide the 256 cycles it takes to shift a tile in)
+
+**Weight FIFO**
+
+* weights are readonly (inference)
+* DAE架构
+* reads from an off-chip 8 GiB DRAM called Weight Memory
+* FIFO是4 tile deep
+
+**Unified Buffer**
+
+* 24MB.  allow MLPs to run at batch sizes up to 2048
+* DMA controller transfers data to or from CPU Host memory and the Unified Buffer
+
+
+
+## TPU v2 Enabling Training at Scale (2017)  & TPU v3 Water-Cooled Performance Scaling (2018)
+
+Codesign with compiler team: 
+
+1. use well-known compiler optimizations for VLIW to exploit parallelism (just like CUDA use single thread compiler optimization)
+2. 围绕linear algebra 这个domain，设计架构和编译器元语
+
+
+
+![image-20260120173355158](./assets/images/image-20260120173355158.png)
+
+相比v1的变化：
+
+* 合并on-chip SRAM来提高训练需要的灵活性: training need to write weights (昇腾有L0 A/B/C, L1, Fixed Pipe, BT buffer, Unified buffer ??)
+* 使用HBM
+* 增加Interconnect link,  2D torus, up to 256 (16x16) chips for TPUv2, up to 2048 chips for TPUv3
+  ![image-20260115165028446](./assets/images/image-20260115165028446.png)
+* 使用VLIW。The VLIW bundle is 322 bits and is composed of two scalar slots,
+  four vector slots (two used for vector load/store), two
+  matrix slots (a push and a pop), one miscellaneous
+  slot (a simple example would be a delay instruction),
+  and six immediates.
+* 增加scalar unit，32x4byte regs, 16KB scalar memory, DMA scalar指令和数据到scalar unit （优点是实现简单）
+  ![image-20260120185922474](./assets/images/image-20260120185922474.png)
+  
+  *(a) TPUv2 core scalar unit and (b) single vector lane. The vector unit contains 128 vector lanes*
+* 把activation fixed unit变成可编程的vector unit，the vector computation unit allows operation
+  on eight sets of 128-wide vectors per clock cycle. Sub-
+  lanes let TPUv2 increase the vector versus matrix com-
+  pute ratio, which is useful for batch normalization
+* Matrix unit，支持bfloat16:  **128 x 128** systolic array of multipliers and adders, delivering 32,768 operations per cycle .
+  The inputs are two matrices: a left hand side matrix
+  and a right hand side matrix. The left hand side matrix
+  streams over a preloaded right hand side matrix to
+  create a streaming result matrix, which is sent directly
+  to the vector unit’s result FIFO. The right hand side
+  matrix can be optionally transposed when loaded into
+  the matrix unit.
+* SparseCore (no detail disclosed until TPU v4)
+
+总结：the core (scalar, vecotr, matrix) doing predictable computation while the asynchronous DMA prefetch from HBM to SRAM; the core sync with the DMA with "sync flag"
+
+
+
+TPUv2 uses two cores per chip (昇腾910B有30 core)
+
+Why two cores? The simpler answer is that we
+could fit a second core into a reasonably sized chip
+. But then why not build a single, bigger core? Wire
+latencies grow as the core gets bigger, and the two-
+core configuration hits the right balance between rea-
+sonable pipeline latency and additional per-chip com-
+putation capacity. We stopped at two bigger cores
+because they are easier to program as they allow the
+developer to reason about one unified instruction
+stream operating on big chunks of data 4 , rather than
+exposing lots of tiny cores that need to be lashed
+together. We took advantage of training fundamen-
+tally being a big-data problem.
+
+双核更容易编程——开发者可以将它们视为一个统一的指令流来处理大块数据，而不必去处理许多需要手动协调的小型核心。
+
+
+
+![image-20260115165042643](./assets/images/image-20260115165042643.png)
+
+![image-20260115142408671](./assets/images/image-20260115142408671.png)
+
+
+
+## TPU v4: Optical Circuit Switching Breakthrough (2021)
+
+
+
+![Screenshot 2026-01-20 at 9.29.17 PM](./assets/images/Screenshot 2026-01-20 at 9.29.17 PM.png)
+
+
+
+相比v3
+
+* up to 4096 chips per pod. 
+* 4x4x4 (64) chips connected with ICI, a rack; 64 racks are connected with OCS, totalling 64x64=4,096 chips
+  ![image-20260116100902987](./assets/images/image-20260116100902987.png)
+  TPUv4 supercomputer （4096 chips） 由64个机柜组成 （图片中只显示了其中8个机柜）。机柜之间用OCS连接，使用twisted 3D torus结构。每个机柜有16个tray。每个tray是2x2mesh。所以每个机柜是4x4x4 3D mesh，用ICI links（Passive electrical cables）连接。
+* each TPU v4 chip contains two TensorCores. Each TensorCore has four matrix-multiply units (MXUs), a vector unit, and a scalar unit. 
+* **CMEM**: Each TensorCore pair shared 128MB of Common Memory in addition to per-core Vector Memory, enabling more sophisticated data staging and reuse patterns.
+* **Sparsecore**: a specialized processor for handling embedding operations used every day in recommendation systems, ranking models, and large language models with massive vocabulary embeddings. The SparseCore featured four dedicated processors per chip, each with 2.5MB of scratchpad memory and optimized dataflow for sparse memory access patterns.²⁰ Models with ultra-large embeddings achieved 5-7× speedups using just 5% of total chip die area and power budget.
+
+The following table shows the key specifications for a v4 TPU Pod.
+
+| **Key specifications**       | **v4 Pod values**            |
+| :--------------------------- | :--------------------------- |
+| Peak compute per chip        | 275 teraflops (bf16 or int8) |
+| HBM2 capacity and bandwidth  | 32 GiB, 1200 GBps            |
+| Measured min/mean/max power  | 90/170/192 W                 |
+| TPU Pod size                 | 4096 chips                   |
+| Interconnect topology        | 3D mesh                      |
+| Peak compute per Pod         | 1.1 exaflops (bf16 or int8)  |
+| All-reduce bandwidth per Pod | 1.1 PB/s                     |
+| Bisection bandwidth per Pod  | 24 TB/s                      |
+
+
+![image-20260116120026414](./assets/images/image-20260116120026414.png)
+
+### Optical Circuit Switching
+
+rack与rack之间用OCS连接
+
+![Screenshot 2026-01-20 at 9.32.05 PM](./assets/images/Screenshot 2026-01-20 at 9.32.05 PM.png)
+
+![Screenshot 2026-01-20 at 9.30.52 PM](./assets/images/Screenshot 2026-01-20 at 9.30.52 PM.png)
+
+![Screenshot 2026-01-20 at 9.33.36 PM](./assets/images/Screenshot 2026-01-20 at 9.33.36 PM.png)
+
+![Screenshot 2026-01-20 at 9.33.55 PM](./assets/images/Screenshot 2026-01-20 at 9.33.55 PM.png)
+
+![Screenshot 2026-01-20 at 9.36.08 PM](./assets/images/Screenshot 2026-01-20 at 9.36.08 PM.png)
+
+![Screenshot 2026-01-20 at 9.37.41 PM](./assets/images/Screenshot 2026-01-20 at 9.37.41 PM.png)
+
+![Screenshot 2026-01-20 at 9.46.37 PM](./assets/images/Screenshot 2026-01-20 at 9.46.37 PM.png)
+
+### SparseCore
+
+![Screenshot 2026-01-21 at 10.29.16 AM](./assets/images/Screenshot 2026-01-21 at 10.29.16 AM.png)
+
+The most general SC units are the 16 compute tiles (dark blue
+boxes in Figure 7). Each tile has an associated HBM channel and
+supports multiple outstanding memory accesses. Each tile has a
+Fetch Unit, a programmable 8-wide SIMD Vector Processing Unit
+(scVPU, not to be confused with VPU of the TC in TPU v4), and a
+Flush Unit. The Fetch Unit reads activations and parameters from
+the HBM into the tile’s slice of a 2.5 MiB Sparse Vector Memory
+(Spmem). The scVPU uses the same ALUs as TC's VPU. The
+Flush Unit writes updated parameters to HBM during the
+backward pass. In addition, the five Cross-Channel Units (gold
+boxes in Figure 7) perform specific embedding operations, which
+their names explain. **Like TPU v1, the units execute CISC-like**
+**instructions and operate on variable-length inputs, where the**
+**run-time of each instruction is data-dependent.** The cross-channel
+units operate across all 16 banks of Spmem collectively.
+
+### Co-Design
+
+![Screenshot 2026-01-20 at 9.39.29 PM](./assets/images/Screenshot 2026-01-20 at 9.39.29 PM.png)
+
+![Screenshot 2026-01-20 at 9.40.17 PM](./assets/images/Screenshot 2026-01-20 at 9.40.17 PM.png)
+
+![Screenshot 2026-01-20 at 9.45.01 PM](./assets/images/Screenshot 2026-01-20 at 9.45.01 PM.png)
+
+## TPU v4i: for Google’s internal, massive-scale **inference** workload
+
+The core architectural difference:
+
+TPU v4: A "megacore" with 2 TensorCores, 8 MXUs, and 32GB of HBM, designed to be liquid-cooled and scale to 4,096 chips via a 3D Torus.
+
+TPU v4i: A "single-core" chip with only 4 MXUs and 8GB or 16GB of memory. It was designed to be air-cooled and fit into existing, standard Google data center racks without needing specialized plumbing.
+
+![download](./assets/images/download-8794415.png)
+
+TPUv4i chip block diagram. Architectural memories
+are HBM, Common Memory (CMEM), Vector Memory
+(VMEM), Scalar Memory (SMEM), and Instruction Memory
+(IMEM). The data path is the Matrix Multiply Unit (MXU),
+Vector Processing Unit (VPU), Cross-Lane Unit (XLU), and
+TensorCore Sequencer (TCS). The uncore (everything not in
+blue) includes the On-Chip Interconnect (OCI), ICI Router
+(ICR), ICI Link Stack (LST), HBM Controller (HBMC),
+Unified Host Interface (UHI), and Chip Manager (MGR).
+
+![image-20260119114720929](./assets/images/image-20260119114720929.png)
+
+## TPU v5p (performance) Specialization and Scale (2022-2023)
+
+Two Tensor Cores per chip
+
+There are 8960 chips in a v5p Pod. The largest job that can be scheduled is a 96 cube (6144 chip) job.
+
+The following table shows the key specifications for TPU v5p.
+
+| Key specifications                                           | v5p values       |
+| :----------------------------------------------------------- | :--------------- |
+| Peak compute per chip (BF16)                                 | 459 TFLOPs       |
+| HBM2e capacity and bandwidth                                 | 95 GB, 2765 GBps |
+| TPU Pod size                                                 | 8960 chips       |
+| Interconnect topology                                        | 3D torus *       |
+| Bidirectional inter-chip interconnect (ICI) bandwidth (per chip) | 1200 GBps        |
+
+Relationship between the number of TensorCores, chips, hosts/VMs, and cubes in a Pod:
+
+|                             | Cores | Chips | Hosts/VMs | Cubes |
+| :-------------------------- | :---- | :---- | :-------- | ----- |
+| **Host**                    | 8     | **4** | 1         |       |
+| **Cube (rack)**             | 128   | 64    | **16**    | 1     |
+| **Largest supported slice** | 12288 | 6144  | 1536      | 96    |
+| **v5p full Pod**            | 17920 | 8960  | 2240      | 140   |
+
+## TPU v5e (efficiency) Specialization and Scale (2022-2023)
+
+One Tensor Core per chip
+
+Cloud TPU v5e is a combined training and inference (serving) product. Training jobs are optimized for throughput and availability, while serving jobs are optimized for latency.
+
+Each v5e chip contains one TensorCore. Each TensorCore has four matrix-multiply units (MXUs), a vector unit, and a scalar unit.
+
+The following diagram illustrates a TPU v5e chip.
+
+![Diagram of a v5e chip](./assets/images/v5e-tensorcore.png)
+
+The following table shows the key chip specifications and their values for v5e.
+
+| Key chip specifications                                      | v5e values      |
+| :----------------------------------------------------------- | :-------------- |
+| Peak compute per chip (bf16)                                 | 197 TFLOPs      |
+| HBM2 capacity and bandwidth                                  | 16 GB, 819 GBps |
+| Bidirectional inter-chip interconnect (ICI) bandwidth (per chip) | 400 GBps        |
+
+The following table shows Pod specifications and their values for v5e.
+
+| Key Pod specifications                | v5e values         |
+| :------------------------------------ | :----------------- |
+| TPU Pod size                          | 256 chips          |
+| Interconnect topology                 | 2D Torus           |
+| Peak compute per Pod                  | 100 PetaOps (Int8) |
+| All-reduce bandwidth per Pod          | 51.2 TBps          |
+| Bisection bandwidth per Pod           | 1.6 TBps           |
+| Data center network bandwidth per Pod | 6.4 Tbps           |
+
+v5e has no SparseCore
+
+
+
+## TPU v6e Trillium: Quadrupling Matrix Performance (2024)
+
+### MXU use 256x256 again
+
+v1 use 256x256
+v2-v5p use 128x128
+
+**Compute Density:** Modern models have extremely large "hidden dimensions" (e.g., 4096, 8192, or higher). A $256 \times 256$ array can process these large matrices more efficiently with less "tiling" overhead.
+
+**Peak Performance:** This larger MXU is the primary reason Trillium achieves a **4.7x increase in peak compute** over the TPU v5e ($918$ TFLOPS vs. $197$ TFLOPS).
+
+**Efficiency:** Larger systolic arrays can be more energy-efficient for very large matrix multiplications because they reuse the same data (operands) across more processing elements before writing back to memory.
+
+
+
+Each v6e chip contains one TensorCore. Each TensorCore has 2 matrix-multiply units (MXU), 256 x 256,  a vector unit, and a scalar unit. The following table shows the key specifications and their values for TPU v6e compared to TPU v5e.
+
+4x FLOPS vs TPU v5e (256x256 vs 128x128)
+
+| Specification                                                | v5e              | v6e                                                          |
+| :----------------------------------------------------------- | :--------------- | :----------------------------------------------------------- |
+| Performance/total cost of ownership (TCO) (expected)         | 0.65x            | 1                                                            |
+| Peak compute per chip (bf16)                                 | 197 TFLOPs       | 918 TFLOPs                                                   |
+| Peak compute per chip (Int8)                                 | 393 TOPs         | 1836 TOPs                                                    |
+| HBM capacity per chip                                        | 16 GB            | 32 GB                                                        |
+| HBM bandwidth per chip                                       | 800 GBps         | 1600 GBps                                                    |
+| Bidirectional inter-chip interconnect (ICI) bandwidth (per chip) | 400 GBps         | 800 GBps                                                     |
+| ICI ports per chip                                           | 4                | 4                                                            |
+| DRAM per host                                                | 512 GiB          | 1536 GiB                                                     |
+| Chips per host                                               | 8                | 8                                                            |
+| TPU Pod size                                                 | 256 chips        | 256 chips                                                    |
+| Interconnect topology                                        | 2D torus         | 2D torus                                                     |
+| BF16 peak compute per Pod                                    | 50.63 PFLOPs     | 234.9 PFLOPs                                                 |
+| All-reduce bandwidth per Pod                                 | 51.2 TB/s        | 102.4 TB/s                                                   |
+| Bisection bandwidth per Pod                                  | 1.6 TB/s         | 3.2 TB/s                                                     |
+| Per-host NIC configuration                                   | 2 x 100 Gbps NIC | 4 x 200 Gbps NIC                                             |
+| Data center network bandwidth per Pod                        | 6.4 Tbps         | 25.6 Tbps                                                    |
+| Special features                                             | -                | [SparseCore](https://docs.cloud.google.com/tpu/docs/system-architecture-tpu-vm#sparsecore) |
+
+Trillium featured the third-generation SparseCore accelerator, with enhanced capabilities for ultra-large embeddings in ranking and recommendation workloads. The updated design improved memory access patterns and increased the adequate bandwidth between SparseCores and HBM for models dominated by embedding lookups rather than matrix multiplications.²⁸
+
+Energy efficiency improved by 67% over v5e despite substantial performance gains.²⁹ Google achieved the efficiency gains through advanced process nodes, architectural optimizations that reduced wasted work, and careful power gating of unused units during operations that didn't stress all parts of the chip simultaneously.
+
+## TPU v7 Ironwood: The FP8 Era (2025)
+
+TPU7x is the first release within the Ironwood family, Google Cloud's seventh generation TPU. The Ironwood generation is designed for large-scale AI training and inference.
+
+With a 9,216-chip footprint per pod, TPU7x shares many similarities with [TPU v5p](https://docs.cloud.google.com/tpu/docs/v5p). TPU7x provides high performance for large scale dense and MoE models, pre-training, sampling and decode-heavy inference.
+
+Each TPU7x chip contains two TensorCores (256x256) and four SparseCores. The following table shows the key specifications and their values for TPU7x compared to prior generations.
+
+| Specification                                                | v5p  | v6e (Trillium) | TPU7x (Ironwood) |
+| :----------------------------------------------------------- | :--- | :------------- | :--------------- |
+| Number of chips per pod                                      | 8960 | 256            | 9216             |
+| Peak compute per chip (BF16) (TFLOPs)                        | 459  | 918            | 2307             |
+| Peak compute per chip (FP8) (TFLOPs)                         | 459  | 918            | 4614             |
+| HBM capacity per chip (GiB)                                  | 95   | 32             | 192              |
+| HBM bandwidth per chip (GBps)                                | 2765 | 1638           | 7380             |
+| Number of vCPUs (4-chip VM)                                  | 208  | 180            | 224              |
+| RAM (GB) (4-chip VM)                                         | 448  | 720            | 960              |
+| Number of TensorCores per chip                               | 2    | 1              | 2                |
+| Number of SparseCores per chip                               | 4    | 2              | 4                |
+| Bidirectional inter-chip interconnect (ICI) bandwidth per chip (GBps) | 1200 | 800            | 1200             |
+| Data center network (DCN) bandwidth per chip (Gbps)          | 50   | 100            | 100              |
+
+The following diagram illustrates the architecture of Ironwood:
+
+![Ironwood architecture diagram](./assets/images/ironwood-architecture.png)
+
+### Dual-chiplet architecture
+
+The Ironwood programming model lets you access two TPU devices instead of the single logical core (also known as [MegaCore](https://docs.jax.dev/en/latest/pallas/tpu/pipelining.html#tpus-in-megacore-configuration)) architecture used in previous generations (TPU v4 and v5p). **This change improves the cost-effectiveness and efficiency of manufacturing the chip.** While this represents an architectural shift, the new design ensures that you can reuse existing software models with minimal changes.
+
+Ironwood TPUs are composed of two distinct chiplets. This is a departure from the unified memory space of the MegaCore architecture.
+
+- **Chiplet composition**: Each chiplet is a self-contained unit with one TensorCore, two SparseCores, and 96 GB of high-bandwidth memory (HBM).
+- **High-speed interconnect**: The two chiplets are connected by a die-to-die (D2D) interface that is six times faster than a 1D inter-chip interconnect (ICI) link. Inter-chiplet communication is managed using collective operations.
+
+### Programming model and framework exposure
+
+The programming model for Ironwood is similar to that of TPU generations earlier than v4, such as TPU v3. The new architecture is exposed in the following ways:
+
+- **Two devices per chip:** Frameworks like JAX expose each Ironwood chip as two separate "devices," one for each chiplet.
+- **4D topology:** JAX adds a fourth dimension to the topology to specify which of the two on-chip devices to use. This lets you use existing software models with minimal modification.
+
+https://cloud.google.com/blog/products/compute/inside-the-ironwood-tpu-codesigned-ai-stack
+
+
+
+## TPU system architecture
+
+TPU chip
+
+**TPU Pod:** A TPU Pod is a contiguous set of TPUs grouped together over a specialized network. The number of TPU chips in a TPU Pod is dependent on the TPU version.
+
+**Slice:** A slice is a collection of chips all located inside the same TPU Pod connected by high-speed inter chip interconnects (ICI). 
+
+**Multislice**: Multislice is a group of slices, extending TPU connectivity beyond the inter-chip interconnect (ICI) connections and leveraging the data-center network (DCN) for transmitting data beyond a slice. Data within each slice is still transmitted by ICI. Using this hybrid connectivity, Multislice enables parallelism across slices and lets you use a greater number of TPU cores for a single job than what a single slice can accommodate.
+
+**TPU cube**: A 4x4x4 topology of interconnected TPU chips. This is only applicable to 3D topologies (beginning with TPU v4).
+
+
+
+## Software
+
+![https://storage.googleapis.com/gweb-cloudblog-publish/images/7-01.max-2000x2000.jpg](./assets/images/7-01.max-2000x2000.jpg)
+
+maxtext: A simple, performant and scalable Jax LLM!
+
+tpu-inference: TPU inference for vLLM, with unified JAX and PyTorch support.
+
+
+
+### Inference
+
+* TPU slices with 8 or less chips have one TPU VM or host and are called *single-host* TPUs. 
+* Multihost inference is a method of running model inference that distributes the model across multiple accelerators hosts. This enables the inference of large models that don't fit on a single host. Pathways can be deployed for both batch and real time multihost inference use cases.
+
+### Training
+
+
+
+## Lessons
+
+**Compiler Compatibility > Binary Compatibility**
+
+- **The Reality:** In the 90s, every chip had to run the same "binary" code.
+- **The Lesson:** For AI, you don't need the same binary; you just need the same **Compiler (XLA)**. As long as XLA can talk to the chip, you can change the hardware architecture (CISC, VLIW, etc.) without breaking the user's Python code.
+
+
+
+![image-20260120211450533](./assets/images/image-20260120211450533.png)
+
+
+
+## Groq & Tenstorrent
+
+**Groq, founded in 2016 by ex-Google TPU lead Jonathan Ross, built specialized *Language Processing Units (LPUs)* for AI inference.** 
+
+### Groq LPU Architecture 
+
+Groq’s chips, as described by the company and analyzed by third parties, emphasize *determinism* and *simplicity*. Each LPU chip is effectively a **single-core tensor processor** with an enormous on-chip memory. Key features (from Groq’s documentation and interviews) include:
+
+- **Single-core design with on-chip SRAM**: Unlike a GPU with thousands of small cores, a Groq LPU has one execution core with hundreds of MB of SRAM as primary weight storage ([[39\]](https://groq.com/lpu-architecture#:~:text=* ,Chip SRAM)). This eliminates the need for external memory caches. The result is extremely high internal bandwidth (Groq claims ~80 TB/s) and very low latency data access ([[27\]](https://byteiota.com/nvidias-20b-groq-deal-licensing-vs-acquisition/#:~:text=The architectural advantage wasn’t incremental—it,according to Anyscale’s LLMPerf Leaderboard)).
+- **Compiler-driven static scheduling**: Before execution, Groq’s compiler schedules every operation in advance, ensuring nothing goes idle. The company notes “every cycle is accounted for” ([[6\]](https://groq.com/lpu-architecture#:~:text=Compiler and software,wasted operations%2C no unpredictable delays)). This contrasts with GPUs, which use dynamic scheduling and multi-thread pipelines that can introduce unpredictable stalls.
+- **Deterministic execution**: Because the hardware and compiler are tightly integrated, Groq chips deliver predictable performance. There are no context-switching or timing variability; each inference run takes nearly the same amount of time. This is crucial for real-time systems where jitter (variability) must be minimized.
+- **Energy efficiency and cooling**: Groq’s LPUs are designed to be air-cooled and power-efficient ([[40\]](https://groq.com/lpu-architecture#:~:text=* )). By focusing on inference, they can avoid the massive power draw of GPU training. (Though independent data on watts/throughput are proprietary, Groq claims advantages in performance-per-watt.)
+
+### Performance Implications
+
+The architectural choices yield concrete performance gains for inference workloads. The independent benchmark cited above (ArtificialAnalysis) exemplifies this: on large language model inference, Groq LPUs achieved significantly more tokens/sec than GPU-based solutions ([[5\]](https://groq.humain.ai/12-hours-later-groq-is-running-llama-3-instruct-8-70b-by-meta-ai-on-its-lpu-inference-enginge/#:~:text=,Combined with Llama 3's)). Intel’s HPC site *NextPlatform* has also discussed Groq, quoting CEO Jonathan Ross on scalability: “ [Inference] scales with number of queries/users. ... It's real-time, latency sensitive, and needs ultra-performance and efficiency” ([[41\]](https://www.nextplatform.com/2019/10/23/a-look-inside-the-groq-approach-to-ai-inference/#:~:text=And yes%2C to repeat%2C we,a revolving one%2C” Ross says)). Ross argued 10% improvements in performance won’t suffice — “you have to do something radically different” ([[42\]](https://www.nextplatform.com/2019/10/23/a-look-inside-the-groq-approach-to-ai-inference/#:~:text=becomes%2C is it worth using,”)).
+
+In practical terms, a customer running NLP or real-time AI inference could see *10× or more* throughput improvement on Groq hardware relative to Nvidia’s GPUs for the same task, according to Groq’s own reports ([[5\]](https://groq.humain.ai/12-hours-later-groq-is-running-llama-3-instruct-8-70b-by-meta-ai-on-its-lpu-inference-enginge/#:~:text=,Combined with Llama 3's)). Although the exact multiple depends on the model and batch size, such leaps mean Nvidia’s GPUs may become a bottleneck for enormous inference loads (like real-time translation for millions of users or autonomous vehicle sensor processing). By internalizing Groq’s design, Nvidia can potentially incorporate these deterministic, low-latency techniques into future accelerators, defending against a loss of market share in inference-heavy applications.
+
+## Why Anthropic Is Betting on TPUs
+
+
+
+![img](./assets/images/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fe59a6872-63e6-4283-96ea-6169f29822a0_1151x646.jpeg)
+
+
+
+![img](./assets/images/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F9582080e-9c38-4b5e-b964-ad512e9a9106_2034x1188.png)
+
+![img](./assets/images/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F0be58268-c1c0-443e-a511-f7bb76961208_1816x676.png)
+
+![img](./assets/images/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fd73646cf-f488-48aa-b5d9-9eb94561c325_1819x904.png)
+
+![img](./assets/images/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F361a49dc-a7e6-4834-a0b7-b61ba0be092c_1946x940.jpeg)
 
 ## References
 
 - https://jax-ml.github.io/scaling-book/
 - https://docs.jax.dev/en/latest/pallas/tpu/index.html
-- [A domain-specific supercomputer for training deep neural networks](https://dl.acm.org/doi/10.1145/3360307)
-- https://dl.acm.org/doi/pdf/10.1145/3079856.3080246
+- [2017 - In-Datacenter Performance Analysis of a Tensor Processing Unit](https://dl.acm.org/doi/pdf/10.1145/3079856.3080246)
 - [The Design Process for Google's Training Chips: TPUv2 and TPUv3](https://ieeexplore.ieee.org/document/9351692)
-- [Ten Lessons From Three Generations Shaped Google’s TPUv4i](https://ieeexplore.ieee.org/document/9499913)
+- https://www.hc32.hotchips.org/assets/program/conference/day2/HotChips2020_ML_Training_Google_Norrie_Patil.v01.pdf
+- [2020 - A domain-specific supercomputer for training deep neural networks](https://dl.acm.org/doi/10.1145/3360307)
 - [TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings](https://dl.acm.org/doi/abs/10.1145/3579371.3589350)
+- [Ten Lessons From Three Generations Shaped Google’s TPUv4i](https://ieeexplore.ieee.org/document/9499913)
+- [TPUv7: Google Takes a Swing at the King](https://newsletter.semianalysis.com/p/tpuv7-google-takes-a-swing-at-the)
+- [Google AI Infrastructure Supremacy: Systems Matter More Than Microarchitecture](https://newsletter.semianalysis.com/p/google-ai-infrastructure-supremacy)
+- [Google Looks To Open Up StreamExecutor To Make GPGPU Programming Easier](https://www.phoronix.com/news/Google-StreamExec-Parallel)
+- https://lists.llvm.org/pipermail/llvm-dev/2016-March/096576.html
+- https://docs.cloud.google.com/tpu
+- TPUv4: https://youtu.be/osurjQmKrys?si=Xx2qzzm3KXpDVCE1
+- [David Patterson: A Decade of Machine Learning Accelerators:Lessons Learned and Carbon Footprint](https://www.youtube.com/watch?v=PLK3pGELbSs)
+- [Google TPUs Explained: Architecture & Performance for Gemini 3](https://intuitionlabs.ai/articles/google-tpu-architecture-gemini-3)
+- [Gemini (language model)](https://en.wikipedia.org/wiki/Gemini_(language_model))
+- [A graph placement methodology for fast chip design](https://www.nature.com/articles/s41586-021-03544-w.epdf?sharing_token=tYaxh2mR5EozfsSL0WHZLdRgN0jAjWel9jnR3ZoTv0PW0K0NmVrRsFPaMa9Y5We9O4Hqf_liatg-lvhiVcYpHL_YQpqkurA31sxqtmA-E1yNUWVMMVSBxWSp7ZFFIWawYQYnEXoBE4esRDSWqubhDFWUPyI5wK_5B_YIO-D_kS8%3D)
 

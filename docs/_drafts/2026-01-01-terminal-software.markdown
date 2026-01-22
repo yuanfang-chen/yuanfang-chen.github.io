@@ -1,4 +1,8 @@
 
+## Nvidia Driver
+[NVIDIA Driver Installation Guide](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html)
+
+
 ## Terminal Proxy
 - set Clash mixed port to 7897
 - add below to .zshrc
@@ -17,6 +21,8 @@ https://apt.kitware.com/
 
 ## LLVM Ubuntu Apt Repo
 https://mirrors.tuna.tsinghua.edu.cn/help/llvm-apt
+
+use /usr/lib/llvm-21 as LLVMINSTALL
 
 ## z shell
 ### Measure initilization time

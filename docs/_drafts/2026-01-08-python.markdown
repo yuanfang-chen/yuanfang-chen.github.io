@@ -1,0 +1,65 @@
+## OS-specific configurations
+
+[Homebrew](https://docs.brew.sh/Homebrew-and-Python)
+[Ubuntu](https://documentation.ubuntu.com/ubuntu-for-developers/howto/python-setup/#install-python)
+
+## venv or apt-get to install Python packages
+For python packages that user want to use globally, use system package manager to install it (like apt-get on Ubuntu)
+For python packates that are specific to a project, use venv to install it
+
+## [decorator](https://docs.python.org/3/glossary.html#term-decorator)
+
+```python
+def f(arg):
+    ...
+f = staticmethod(f)
+
+@staticmethod
+def f(arg):
+    ...
+```
+
+
+## [pytest](https://docs.pytest.org/en/stable/getting-started.html)
+
+### Create your first test
+Create a new file called test_sample.py, containing a function, and a test:
+```python
+# content of test_sample.py
+def func(x):
+    return x + 1
+
+
+def test_answer():
+    assert func(3) == 5
+```
+
+The test
+```bash
+$ pytest
+=========================== test session starts ============================
+platform linux -- Python 3.x.y, pytest-9.x.y, pluggy-1.x.y
+rootdir: /home/sweet/project
+collected 1 item
+
+test_sample.py F                                                     [100%]
+
+================================= FAILURES =================================
+_______________________________ test_answer ________________________________
+
+    def test_answer():
+>       assert func(3) == 5
+E       assert 4 == 5
+E        +  where 4 = func(3)
+
+test_sample.py:6: AssertionError
+========================= short test summary info ==========================
+FAILED test_sample.py::test_answer - assert 4 == 5
+============================ 1 failed in 0.12s =============================
+```
+
+pytest will run all files of the form test_*.py or *_test.py in the current directory and its subdirectories. More generally, it follows standard test discovery rules.
+
+The [100%] refers to the overall progress of running all test cases. After it finishes, pytest then shows a failure report because func(3) does not return 5.
+
+

@@ -11,6 +11,8 @@ mathjax: true
 
 ![image-20251225144329395](/assets/images/pytorch-like-triton.png)
 
+## Future Work
+https://pytorch.org/blog/warp-specialization-in-triton-design-and-roadmap/
 
 ## 二八定律
 巴莱特定律（Pareto Principle），又称**二八定律**或**帕累托法则**，是由意大利经济学家帕累托发现的，其核心思想是：在任何一组事物中，最重要的部分（关键少数）只占约20%，却能带来80%的成果（主要结果），而剩余80%的次要部分，仅带来20%的成果。此定律广泛应用于经济、管理、时间管理等领域，强调应聚焦于那关键的20%投入，以获得主要的80%产出。 
@@ -30,6 +32,8 @@ mathjax: true
 
 **实际意义**
 巴莱特定律指导人们识别和聚焦于“关键少数”，避免在次要的80%上耗费过多精力，从而更高效地分配有限的资源，以最小的投入获得最大的回报。
+
+https://en.wikipedia.org/wiki/Pareto_front
 
 ## Triton总览
 

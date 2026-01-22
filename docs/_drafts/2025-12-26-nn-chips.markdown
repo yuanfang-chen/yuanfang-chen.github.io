@@ -1,13 +1,21 @@
 ---
 layout: post
-title:  "Neural Processors"
+title:  "Domain Specific Accelerators"
 # date:   2025-12-08 11:18:26 -0800
 categories: ML
 typora-root-url: ..
 mathjax: true
 ---
 
+## Guidelines for DSAs
+1. Use dedicated memories to minimize the distance over which data is moved.
+2. Invest the resources saved from dropping advanced microarchitectural optimi-
+zations into more arithmetic units or bigger memories.
+3. Use the easiest form of parallelism that matches the domain.
+4. Reduce data size and type to the simplest needed for the domain.
+5. Use a domain-specific programming language to port code to the DSA.
 
+## References
 
 https://en.wikichip.org/wiki/neural_processor
 A Survey on Deep Learning Hardware Accelerators for Heterogeneous HPC Platforms 

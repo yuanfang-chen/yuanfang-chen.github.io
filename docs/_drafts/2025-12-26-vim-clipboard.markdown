@@ -5,6 +5,8 @@ works
 
 ## vim with tmux
 
+## remember a series of actions, then replay with "."
+
 
 
 - Find the config from within Neovim: `:echo stdpath('config')`
