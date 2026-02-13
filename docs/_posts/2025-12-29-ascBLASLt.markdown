@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Ascend ascBLASLt"
-date: 2025-12-29 11:18:26 -0800
+# date:   2025-12-08 11:18:26 -0800
 categories: ascend
 typora-root-url: ..
 mathjax: true
@@ -154,7 +154,7 @@ DataType::DT_FLOAT/DataType::DT_FLOAT16/DataType::DT_BFLOAT16/DataType::DT_INT8/
 
 [ascblasComputeType_t](https://docs.nvidia.com/cuda/ascblas/#ascblascomputetype-t)枚举类型用于[ascblasGemmEx()](https://docs.nvidia.com/cuda/ascblas/#ascblasgemmex)和[ascblasLtMatmul()](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmul)（包括所有批处理和跨步批处理变体）中，以选择如下定义的计算精度模式。
 
-| 值 \| 含义                    |                                                              |
+| 值           | 含义                    |
 | ----------------------------- | ------------------------------------------------------------ |
 | `ascblas_COMPUTE_16F`          | 这是16位半精度浮点数以及所有计算和中间存储精度至少为16位半精度的默认且性能最高的模式。只要有可能，就会使用张量核心。 |
 | `ascblas_COMPUTE_32F_FAST_16F` | 允许该库使用张量核心，通过自动下转换和16位半精度计算来处理32位输入和输出矩阵。 |
@@ -179,7 +179,7 @@ DataType::DT_FLOAT/DataType::DT_FLOAT16/DataType::DT_BFLOAT16/DataType::DT_INT8/
 
 [ascblasLtMatmulDescAttributes_t](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmuldescattributes-t)是矩阵乘法描述符，定义矩阵乘法运算具体细节。使用[ascblasLtMatmulDescGetAttribute()](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmuldescgetattribute)和[ascblasLtMatmulDescSetAttribute()](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmuldescsetattribute)来获取和设置矩阵乘法描述符的属性值。
 
-| 值                                                | 描述                                                         | 数据类型                                                     |
+| 值              | 描述       |     数据类型   |
 | ------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | `ascblasLT_MATMUL_DESC_COMPUTE_TYPE`              | 计算类型。定义用于乘法和累加运算的数据类型，以及矩阵乘法过程中的累加器。参见[ascblasComputeType_t](https://docs.nvidia.com/cuda/ascblas/#ascblascomputetype-t)。 | `int32_t`                                                    |
 | `ascblasLT_MATMUL_DESC_SCALE_TYPE`                | 缩放类型。定义缩放因子`alpha`和`beta`的数据类型。累加器值和来自矩阵`C`的值通常在最终缩放前转换为缩放类型。然后，该值在存储到内存前从缩放类型转换为矩阵`D`的类型。默认值取决于`ascblasLT_MATMUL_DESC_COMPUTE_TYPE`。请参见[cudaDataType_t](https://docs.nvidia.com/cuda/ascblas/#cudadatatype-t)。 | `int32_t`                                                    |
@@ -315,13 +315,14 @@ DataType::DT_FLOAT/DataType::DT_FLOAT16/DataType::DT_BFLOAT16/DataType::DT_INT8/
 
 [ascblasLtMatmulHeuristicResult_t](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmulheuristicresult-t)是一个描述符，用于存储已配置的矩阵乘法算法描述符及其运行时属性。
 
-| 成员                                                         | 描述                                                         |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 成员            | 描述       |
+| ----------------------- | ------------------------------------------- |
 | [ascblasLtMatmulSomething_t](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmulalgo-t)某事 | 如果偏好设置`ascblasLT_MATMUL_PERF_SEARCH_MODE`被设为`ascblasLT_SEARCH_LIMITED_BY_ALGO_ID`，则必须通过[ascblasLtMatmulAlgoInit()](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmulalgoinit)进行初始化。参见[ascblasLtMatmulSearch_t](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmulsearch-t)。 |
 | `size_t` 工作区大小；                                        | 所需工作区内存的实际大小。                                   |
 | [ascblasStatus_t](https://docs.nvidia.com/cuda/ascblas/#ascblasstatus-t) 状态； | 结果状态。只有在调用[ascblasLtMatmulAlgoGetHeuristic()](https://docs.nvidia.com/cuda/ascblas/#ascblasltmatmulalgogetheuristic)后，此成员被设置为`ascblas_STATUS_SUCCESS`时，其他字段才有效。 |
 | `float` 波数;                                                | 波浪计数是一种设备利用率指标。`wavesCount`值为1.0f表明，当启动内核时，它将完全占用GPU。 |
-| `int` reserved[4];                                           | 保留。                                                       |
+| `int` reserved[4];                                           | 保留。   |
+
 ### ascblasLtEpilogue_t
 [ascblasLtEpilogue_t](https://docs.nvidia.com/cuda/ascblas/#ascblasltepilogue-t)是一种枚举类型，用于设置后处理。
 
