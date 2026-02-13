@@ -1,0 +1,35 @@
+## DualPipe
+
+DualPipe: **how to fully overlap forward and backward passes in large-model training**
+
+
+
+## **FlashMLA**
+
+
+
+## DeepSeek Sparse Attention (DSA)
+
+
+
+## **DeepEP**
+
+
+
+## **DeepGEMM**
+
+
+
+## MLA
+
+
+
+
+
+## References
+
+https://huggingface.co/blog/NormalUhr/deepseek-dualpipe
+
+https://magazine.sebastianraschka.com/p/technical-deepseek
+
+https://martinfowler.com/articles/deepseek-papers.html

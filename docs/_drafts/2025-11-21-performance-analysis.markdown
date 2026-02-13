@@ -9,10 +9,25 @@ mathjax: true
 
 ## 数学
 
+(毫秒, ms) A millisecond is 1/1000 of a second (.001 seconds). There are 1000 milliseconds in a second.
+(微秒, us) A microsecond is 1/1000000 of a second (.000001 seconds). There are one million milliseconds in a second.
+(纳秒, ns) A nanosecond is 1/1000000000 of a second (.000000001 seconds). There are one billion nanoseconds in a second.
 
-A millisecond is 1/1000 of a second (.001 seconds). There are 1000 milliseconds in a second.
-A microsecond is 1/1000000 of a second (.000001 seconds). There are one million milliseconds in a second.
-A nanosecond is 1/1000000000 of a second (.000000001 seconds). There are one billion nanoseconds in a second.
+
+
+|                         Name                         |                             Unit                             | Value |
+| :--------------------------------------------------: | :----------------------------------------------------------: | :---: |
+|   [kilo](https://en.wikipedia.org/wiki/Kilo-)FLOPS   |                            kFLOPS                            |  $$10^3$$  |
+|   [mega](https://en.wikipedia.org/wiki/Mega-)FLOPS   |                            MFLOPS                            |  $$10^6$$  |
+|   [giga](https://en.wikipedia.org/wiki/Giga-)FLOPS   | GFLOPS[[2\]](https://en.wikipedia.org/wiki/Floating_point_operations_per_second#cite_note-2) |  $$10^9$$  |
+|   [tera](https://en.wikipedia.org/wiki/Tera-)FLOPS   |                            TFLOPS                            | $$10^{12}$$  |
+|   [peta](https://en.wikipedia.org/wiki/Peta-)FLOPS   |                            PFLOPS                            | $$10^{15}$$  |
+|    [exa](https://en.wikipedia.org/wiki/Exa-)FLOPS    |                            EFLOPS                            | $$10^{18}$$  |
+|  [zetta](https://en.wikipedia.org/wiki/Zetta-)FLOPS  |                            ZFLOPS                            | $$10^{21}$$  |
+|  [yotta](https://en.wikipedia.org/wiki/Yotta-)FLOPS  |                            YFLOPS                            | $$10^{24}$$  |
+|  [ronna](https://en.wikipedia.org/wiki/Ronna-)FLOPS  |                            RFLOPS                            | $$10^{27}$$  |
+| [quetta](https://en.wikipedia.org/wiki/Quetta-)FLOPS |                            QFLOPS                            | $$10^{30}$$  |
+
 
 ## 功耗
 
