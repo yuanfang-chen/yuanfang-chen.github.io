@@ -1,0 +1,245 @@
+## How cuBLAS/cuBLASLt Uses CUTLASS
+
+
+```
+┌─────────────────────────────────────────────────┐
+│  cuBLAS / cuBLASLt  (closed-source, shipped     │
+│  as part of CUDA Toolkit)                        │
+│                                                  │
+│  ┌──────────────┐  ┌──────────────────────────┐ │
+│  │ Hand-tuned   │  │ CUTLASS-based kernels    │ │
+│  │ kernels      │  │ (compiled from CUTLASS   │ │
+│  │              │  │  templates at NVIDIA's   │ │
+│  │              │  │  build time)             │ │
+│  └──────────────┘  └──────────────────────────┘ │
+│                                                  │
+│  Heuristic dispatcher: picks best kernel based   │
+│  on problem size, dtype, layout, GPU arch        │
+└─────────────────────────────────────────────────┘
+```
+
+1. **NVIDIA engineers instantiate CUTLASS templates** with specific tile sizes, data types, and policies tuned for each GPU architecture
+2. These are **compiled ahead of time** into cuBLAS's shared library (`libcublas.so`)
+3. At runtime, cuBLASLt's **heuristic engine** selects the best kernel for a given GEMM problem (size, dtype, layout, SM count, etc.)
+4. The selected kernel — which may be CUTLASS-derived or hand-written — is launched
+
+### What Role CUTLASS Plays
+
+- **Kernel generation framework** — CUTLASS's C++ templates let NVIDIA systematically generate hundreds of specialized GEMM kernel variants (different tile shapes, pipeline depths, data types)
+- **Not all cuBLAS kernels are CUTLASS** — some are hand-tuned assembly or CUDA kernels, especially for older architectures or edge cases
+- **cuBLASLt exposes more control** — `cublasLtMatmul` lets users select specific "algo IDs" that may map to different CUTLASS instantiations under the hood
+
+### In This Repo
+
+cuBLAS appears **only as a comparison/verification tool**:
+
+- The [CUTLASS Profiler](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/tools/) can benchmark CUTLASS kernels against cuBLAS as a reference
+- The cmake file [cuBLAS.cmake](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/cuBLAS.cmake) just locates the cuBLAS library for linking into the profiler
+- Several docs mention cuBLAS for API comparison (e.g., "CUTLASS handle has semantics similar to cuBLAS")
+
+### Why This Matters
+
+If you're calling cuBLAS from your application, you're **indirectly using CUTLASS-generated kernels** for many GEMM operations — but through a closed-source, pre-compiled path with NVIDIA's proprietary tuning and dispatch logic. Using CUTLASS directly gives you full control over tiling, scheduling, and fusion, at the cost of doing your own kernel selection.
+
+
+
+## cuBLAS shared library is big 
+
+CUDA 13.1:
+
+| Library          | Size        |
+| ---------------- | ----------- |
+| `libcublas.so`   | 52 MB       |
+| `libcublasLt.so` | **480 MB**  |
+| **Total**        | **~532 MB** |
+
+The bulk is in **cuBLASLt** — that's where the hundreds (thousands) of pre-compiled GEMM kernel variants live. Each combination of:
+
+- **Data type** (FP64, FP32, TF32, FP16, BF16, FP8, INT8, FP4, ...)
+- **Layout** (NN, NT, TN, TT)
+- **Tile size** (128x128, 256x128, 64x64, ...)
+- **Pipeline depth / stages**
+- **GPU architecture** (SM70, SM75, SM80, SM89, SM90, SM100, ...)
+
+...produces a distinct compiled kernel (CUBIN) that's baked into the `.so`. This is exactly the CUTLASS template instantiation approach at scale — NVIDIA pre-compiles a large matrix of configurations so the heuristic dispatcher can pick the best one at runtime.
+
+For comparison, the entire CUTLASS header-only source tree is much smaller — the size cost only materializes when you compile your own kernel instantiations.
+
+
+
+
+
+
+
+## How rocBLAS and hipBLASLt Use Tensile / TensileLite
+
+### rocBLAS + Tensile
+
+**Tensile is an external dependency** fetched at build time (version 4.45.0):
+
+
+
+```
+User calls rocblas_gemm_ex(...)
+  → rocBLAS constructs RocblasContractionProblem<Ti, To, Tc>
+  → runContractionProblem()  [tensile_host.cpp]
+  → Tensile::MasterSolutionLibrary finds best kernel
+  → Kernel launched via HIP
+```
+
+Key integration points:
+
+- [tensile_host.hpp](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/projects/rocblas/library/src/include/tensile_host.hpp) — abstraction layer that hides Tensile internals from rocBLAS
+- [tensile_host.cpp](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/projects/rocblas/library/src/tensile_host.cpp) — ~1600 lines implementing the bridge, with template instantiations for every type combo (`<half, half, float>`, `<int8_t, int32_t>`, etc.)
+- Library loaded **lazily** per-device, with mutex-protected static initialization
+- rocBLAS can **optionally route to hipBLASLt** as a faster backend for certain types/sizes, falling back to Tensile if hipBLASLt fails
+
+### hipBLASLt + TensileLite
+
+**TensileLite is built-in** as a subproject (`add_subdirectory(tensilelite)`):
+
+
+
+```
+User calls hipblaslt_matmul(...)
+  → hipBLASLt constructs RocblasltContractionProblem (95+ fields)
+  → initTensileGemmData() + runContractionProblem()  [tensile_host.cpp]
+  → TensileLite::MasterSolutionLibrary finds best kernel
+  → (optional) RocRoller override for custom-tuned kernels
+  → Kernel launched via HIP
+```
+
+Key integration points:
+
+- [tensile_host.cpp](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/projects/hipblaslt/library/src/amd_detail/rocblaslt/src/tensile_host.cpp) — ~3200 lines, directly includes Tensile headers (no abstraction layer)
+- Much richer problem representation supporting fused operations (bias, activations, scaling, epilogues)
+
+### Key Differences
+
+| Aspect              | rocBLAS                                 | hipBLASLt                                          |
+| ------------------- | --------------------------------------- | -------------------------------------------------- |
+| **Tensile version** | External dependency (Tensile)           | Built-in subproject (TensileLite)                  |
+| **Abstraction**     | Clean abstraction header hiding Tensile | Direct Tensile includes, no abstraction            |
+| **Problem type**    | Simple templated `<Ti, To, Tc>`         | 95+ field struct (bias, activation, scaling, etc.) |
+| **Scope**           | Basic GEMM only                         | GEMM + grouped GEMM + fused epilogues              |
+| **Fallback**        | Can route to hipBLASLt                  | Can route to RocRoller for custom kernels          |
+| **Library loading** | Lazy per-device                         | Lazy per-device (same pattern)                     |
+
+### The rocBLAS → hipBLASLt Routing
+
+Interestingly, **rocBLAS can delegate to hipBLASLt** for better performance:
+
+1. `useHipBLASLt()` checks if the problem type/GPU qualifies
+2. If yes, maps the solution index and calls `runContractionProblemHipBlasLT()`
+3. If hipBLASLt fails or doesn't match, falls back to its own Tensile path
+
+This means for some workloads, rocBLAS → hipBLASLt → TensileLite, while for others it goes rocBLAS → Tensile directly.
+
+
+
+## RocRoller — AMD's Programmatic Kernel Generator
+
+RocRoller (located in [shared/rocroller/](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/shared/rocroller/)) is a **JIT assembly kernel generator** for AMDGPU. Where TensileLite selects from a pre-built library of kernels, RocRoller **generates kernels on-the-fly** from high-level specifications.
+
+### Core Capabilities
+
+- **Generates optimized GEMM assembly kernels programmatically** — no pre-compiled database needed
+- **Supports advanced data types**: FP8, BF8, FP4, BF6, plus block-scaled (MX) formats
+- **Block scaling**: Per-block scaling factors for MX-format matrices — this is its primary advantage over TensileLite
+- **StreamK**: Cooperative kernel execution for better load balancing across CUs
+- **Prefetching & LDS optimization**: Overlapped memory access and computation
+- **35+ tile configurations**: From `(16,16,256)` to `(256,256,256)`, analytically ranked per problem
+
+### Architecture — Graph-Based Kernel Representation
+
+Instead of templates, RocRoller uses a **dual-graph model**:
+
+
+
+```
+Command (high-level spec: "multiply A × B with scaling")
+  → KernelGraph
+      ├── ControlGraph   (loops, branches, barriers)
+      └── CoordinateGraph (registers, LDS, memory ops)
+  → Transforms (unroll, fuse, optimize)
+  → CodeGen (AMDGPU assembly instructions)
+  → Assembler (amd_comgr → executable code object)
+```
+
+This lets a single specification produce kernels for arbitrary dimensions and types, with **runtime expressions** evaluated against actual M, N, K values.
+
+### When hipBLASLt Uses RocRoller vs TensileLite
+
+The decision is in [tensile_host.cpp](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/projects/hipblaslt/library/src/amd_detail/rocblaslt/src/tensile_host.cpp):
+
+
+
+```cpp
+bool useRocRoller(rocblaslt_handle handle, const RocblasltContractionProblem& prob)
+{
+    return handle->useRocRoller == 1
+           || (handle->useRocRoller == -1
+               && (isBlockScaling(prob.scaleAType) || isBlockScaling(prob.scaleBType)));
+}
+```
+
+| Condition                             | Backend             |
+| ------------------------------------- | ------------------- |
+| `HIPBLASLT_USE_ROCROLLER=1` (env var) | RocRoller forced    |
+| Block-scaled inputs (MX format)       | RocRoller automatic |
+| Default GEMM                          | TensileLite         |
+
+### Key Differences from TensileLite
+
+|                 | TensileLite                                   | RocRoller                             |
+| --------------- | --------------------------------------------- | ------------------------------------- |
+| **When**        | Offline (pre-compiled)                        | JIT (on-demand)                       |
+| **How**         | Selects from solution database                | Generates assembly from graph         |
+| **Flexibility** | Limited to pre-generated configs              | Arbitrary parameters                  |
+| **Strength**    | Fast lookup, battle-tested                    | Block scaling, emerging types         |
+| **Caching**     | `CachingLibrary` (the file you're looking at) | `SolutionCache` in rocroller_host.cpp |
+
+### Solution Selection
+
+RocRoller uses **Origami** (an analytical performance model) to rank tile configurations. For a given problem it:
+
+1. Enumerates valid tile sizes for the data type and GPU
+2. Predicts performance analytically (considers CU count, memory bandwidth, occupancy)
+3. Returns the top-N configurations
+4. Caches generated kernels so subsequent calls skip compilation
+
+In short: RocRoller is the **flexible, JIT-based complement** to TensileLite's pre-built library approach, currently focused on block-scaled and emerging-precision GEMM workloads.
+
+
+
+### Shared Library Size Comparison (rocBLAS vs cuBLAS)
+
+Both rocBLAS and cuBLAS ship **thousands of pre-compiled GPU kernels**. The key difference is packaging, not total size:
+
+**rocBLAS** ships kernels as **separate files** on disk:
+
+- `TensileLibrary_lazy_gfx942.dat` — metadata/selection logic per GPU arch
+- `*gfx942*.co` — code objects (compiled kernels) loaded at runtime via `adapter.loadCodeObjectFile()`
+- The `librocblas.so` itself is relatively small — it's just the host-side C++ logic
+- But the **total install size** (library + kernel files) is very large — typically **several GB** across all supported GPU architectures
+
+**cuBLAS** bundles kernels **inside the shared library**:
+
+- `libcublas.so` is a single large file (~500MB+)
+- Everything in one binary
+
+### So Which Is "Smaller"?
+
+| Metric                      | rocBLAS                            | cuBLAS                   |
+| --------------------------- | ---------------------------------- | ------------------------ |
+| **`lib\*.so` alone**        | Small (~tens of MB)                | Large (~500MB+)          |
+| **Total install footprint** | Large (GB+ with all `.co` files)   | Large (~500MB+)          |
+| **Runtime memory**          | Lazy-loads only needed `.co` files | Loads from single binary |
+
+The `librocblas.so` shared library is smaller, but that's misleading — the bulk of rocBLAS lives in the external `.co` (code object) files. The **total footprint** is comparable or even larger than cuBLAS because rocBLAS ships kernels for many AMD GPU architectures (gfx906, gfx90a, gfx942, gfx1100, etc.) as separate files, whereas cuBLAS can use PTX JIT compilation to cover multiple NVIDIA architectures from fewer binaries.
+
+The architectural tradeoff:
+
+- **rocBLAS**: Smaller `.so`, but needs a directory of kernel files → lazy loading possible (only loads what you need)
+- **cuBLAS**: Bigger `.so`, but self-contained → simpler deployment, and NVIDIA's PTX provides forward compatibility that reduces the need for per-arch binaries
+
