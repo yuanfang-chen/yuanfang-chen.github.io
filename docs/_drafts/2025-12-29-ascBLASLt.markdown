@@ -7,6 +7,99 @@ typora-root-url: ..
 mathjax: true
 ---
 
+## 实现计划
+
+### **预备知识**
+
+- 学习rocBLAS/hipBLASLt的架构和代码
+- 学习cuBLAS/cuBLASLt的架构和代码
+- Python-first
+- 【AI】制定完整的API，参考[ychen2.cn](http://ychen2.cn)的文章
+- 写完整且正确的测试集，使用[OpenBLAS](https://github.com/OpenMathLib/OpenBLAS)作为参考实现
+- performance benchmark suite
+- 构建系统
+- 使用catlass, 不使用ascendc，考虑使用ccec
+- 参考**NVIDIA Matmul Heuristics**
+- 参考ops-base/ops-nn中NPU上GEMM的实现
+
+
+
+### **MVP元素**
+
+- simple Python and C++ demo
+- Python/C++ support
+- rigorous test coverage
+- rigorous benchmark suite
+- nvMatmulHeuristics
+- no windows support but the implementation should leave slot for non-Linux OS support
+
+
+
+**nvMatmulHeuristics**
+
+
+
+nvMatmulHeuristics utilizes an internal **predictive performance model** based on **fast analytical heuristics** to optimize GEMM kernel selection.
+
+Key implementation details of the model include:
+
+- **Training Data:** The model is trained on **actual timing data** (often referred to as "silicon performance scans" or "discovery data") collected across a massive problem space of different matrix shapes, precisions, and data layouts.
+- **Predictive Function:** It acts as a **recommender system** that takes a specific GEMM problem definition—including dimensions ($M, N, K$), data types, and hardware properties—and predicts a small subset (typically 8 to 16) of "high-potential" kernel configurations.
+- **Modeling Capabilities:** The framework provides sophisticated estimations for several metrics, including **runtime estimation**, memory bandwidth analysis, L2 cache hit rate prediction, and energy consumption.
+- **Integration with cuBLAS:** This module powers the heuristics within the cuBLAS library, which achieves a selection accuracy of approximately 93% across diverse workloads.
+- **Custom Tuning:** The system supports a "discovery" process where users can manually run benchmarks to tune the heuristics for customized kernels that may not be covered by the internal pre-trained model.
+
+By using this predictive approach instead of exhaustive brute-force search, the system can achieve near-optimal performance while reducing compilation and tuning times from many hours to a fraction of that effort.
+
+
+
+
+
+The description of the model used by nvMatmulHeuristics as an "internal predictive performance model based on fast analytical heuristics" is derived from several official NVIDIA technical sources and developer documentations:
+
+- **Fast Analytical Heuristics:** Multiple sources explicitly define the module as providing "fast analytical heuristics" for GEMM kernel meta-parameter optimization. These heuristics are designed to analyze operation parameters and hardware capabilities in real-time.
+- **Predictive Modeling:** The system is documented as providing "sophisticated performance modeling and prediction capabilities," specifically for metrics like runtime estimation, memory bandwidth throughput, and L2 cache hit rates. It is referred to in technical deep-dives as a "predictive model" used to recommend a small subset of high-potential configurations from a massive search space.
+- **Internal Discovery Data:** The "internal" nature of the model refers to its reliance on "internal discovery data" or "silicon performance scans". This is actual timing data collected by NVIDIA from running a large number of problems across diverse precisions, matrix shapes, and layouts on the GPU.
+- **Implementation Details:** The API includes specific types such as nvmmhPerformanceModel_t, which is a callback used to interact with or override the "internal performance model estimates".
+
+In summary, the module uses these pre-trained analytical models to bypass the "brute-force" or "exhaustive" search that historically required compiling and profiling thousands of kernels, achieving near-optimal performance (93–96% accuracy) in a fraction of the time.
+
+
+
+### **参考资料**
+
+https://www.anthropic.com/engineering/building-c-compiler
+
+https://deepwiki.com/ROCm/rocm-libraries/2-monorepo-structure-and-component-management
+
+https://rocm.docs.amd.com/projects/Tensile/en/docs-7.1.1/src/index.html#
+
+rocm-libraries
+
+
+
+CUDA
+
+https://www.ychen2.cn/cuda/2025/11/14/cuBLASLt-api.html
+
+
+
+ROCm
+
+https://github.com/ROCm/rocm-libraries/tree/develop/projects/hipblaslt
+
+
+
+CANN
+
+https://gitcode.com/cann/ops-nn
+
+https://gitcode.com/cann/ge
+
+https://deepwiki.com/chenqi123/ops-nn/1-overview
+
+
+
 
 ![img](/assets/images/v2-1d1e8468ba44adb7b3ec6659589b173d_1440w.jpg)
 
@@ -793,4 +886,6 @@ ascblasStatus_t ascblasLtMatmulAlgoConfigSetAttribute(
 (关于ascblasLtMatmulTile_t). 昇腾 tensor core支持的matrix大小？
 
 https://leimao.github.io/blog/NVIDIA-Tensor-Core-MMA-Instruction-TN-Layout/
+
+
 
