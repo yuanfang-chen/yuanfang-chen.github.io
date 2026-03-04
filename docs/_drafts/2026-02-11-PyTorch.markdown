@@ -34,7 +34,7 @@ mathjax: true
 import torch
 
 x = torch.randn(3, 4)
-W = torch.randn(5, 4)  # bug: should be (4, 5)
+W = torch.randn(5, 4) #  bug () 
 
 out = x @ W  # just normal Python, runs immediately
 print(out)
@@ -69,11 +69,39 @@ with tf.Session() as sess:
 
 
 
+
+
+
+
+
+
+
+
+
+
 [RFC-0020-Lightweight-Dispatch](https://github.com/pytorch/rfcs/blob/master/RFC-0020-Lightweight-Dispatch.md)
 
 [RFC-0045-decoupling-cuda-code [commenting]](https://github.com/pytorch/rfcs/pull/82)
 
 [[RFC] Generalize pytorch content for non-native device execution](https://github.com/pytorch/rfcs/pull/66)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
