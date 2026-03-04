@@ -15,6 +15,10 @@ CANN相关的文档全部使用Sphinx
 
 
 
+work with Compiler Explorer to support NPU
+
+
+
 学习Groq LPU, Deterministic execution
 
 > ## Execution Model: Static Scheduling

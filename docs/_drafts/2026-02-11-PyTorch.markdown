@@ -1,4 +1,81 @@
-PyTorch
+---
+layout: post
+title:  "PyTorch总结"
+# date:   2025-12-08 11:18:26 -0800
+categories: ML
+typora-root-url: ..
+mathjax: true
+---
+
+## 模型
+
+例子：一个神经网络模型
+
+![image-20260303153328436](./assets/images/image-20260303153328436.png)
+
+## 问题：如何表示模型
+
+- 方案1：模型是图，把图给图编译器，执行编译产物获得模型输出
+  - 代表：Tensorflow 1.0, Huawei Graph Engine
+  - 优点：易用性好
+  - 缺点：性能一般
+
+- 方案2：模型是程序，直接用解释器执行图获得模型输出
+
+  - 代表：PyTorch
+  - 优点：性能好
+  - 缺点：易用性一般
+
+类比：C++ vs Python
+
+**PyTorch**
+
+```python
+import torch
+
+x = torch.randn(3, 4)
+W = torch.randn(5, 4)  # bug: should be (4, 5)
+
+out = x @ W  # just normal Python, runs immediately
+print(out)
+```
+
+**Tensorflow 1.0**
+
+```python
+import tensorflow as tf
+
+x = tf.placeholder(tf.float32, shape=(3, 4))
+W = tf.Variable(tf.random_normal([5, 4]))  # bug: wrong shape
+
+out = tf.matmul(x, W)  # ← this does NOT run. It just builds a graph node.
+print(out)              # prints: Tensor("MatMul:0", shape=(?, ?), dtype=float32)
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    result = sess.run(out, feed_dict={x: actual_data})  
+```
+
+
+
+![image-20260303202056713](./assets/images/image-20260303202056713.png)
+
+| 框架              | 描述                                                         |
+| :---------------- | ------------------------------------------------------------ |
+| Legacy Tensorflow | High performance via static graph compilation, but notoriously painful to debug and use. The session/graph paradigm alienated many developers. |
+| Modern Tensorflow | TF2 adopted eager execution (copying PyTorch) to recover usability. Better than TF1 to use, but the messy TF1→TF2 migration left lasting trust issues. |
+| PyTorch 1.0       | Excellent usability with dynamic graphs and Pythonic feel. Performance lagged behind TF1 due to eager execution overhead. |
+| PyTorch 2.0       | torch.compile() brought near-static-graph performance while keeping dynamic usability. Best of both worlds — the clear leader on both axes. |
+
+
+
+[RFC-0020-Lightweight-Dispatch](https://github.com/pytorch/rfcs/blob/master/RFC-0020-Lightweight-Dispatch.md)
+
+[RFC-0045-decoupling-cuda-code [commenting]](https://github.com/pytorch/rfcs/pull/82)
+
+[[RFC] Generalize pytorch content for non-native device execution](https://github.com/pytorch/rfcs/pull/66)
+
+
 
 **目标是看PyTorch是否对CUDA有强耦合依赖，最终希望通过PyTorch和底层芯片的解耦，使得PyTorch在昇腾上获得预期的性能。**
 
@@ -6,13 +83,384 @@ PyTorch
 
 
 
+according to https://blog.ezyang.com/2019/05/pytorch-internals/, add Tensor extension for NPU needs some big change.
+
+> Our current model for extensions offers four extension points on tensors. First, there is the trinity three parameters which uniquely determine what a tensor is:
+>
+> - The **device**, the description of where the tensor’s physical memory is actually stored, e.g., on a CPU, on an NVIDIA GPU (cuda), or perhaps on an AMD GPU (hip) or a TPU (xla). The distinguishing characteristic of a device is that it has its own allocator, that doesn’t work with any other device.
+> - The **layout**, which describes how we logically interpret this physical memory. The most common layout is a strided tensor, but sparse tensors have a different layout involving a pair of tensors, one for indices, and one for data; MKL-DNN tensors may have even more exotic layout, like blocked layout, which can’t be represented using merely strides.
+> - The **dtype**, which describes what it is that is actually stored in each element of the tensor. This could be floats or integers, or it could be, for example, quantized integers.
+>
+> If you want to add an extension to PyTorch tensors (by the way, if that’s what you want to do, please talk to us! None of these things can be done out-of-tree at the moment), you should think about which of these parameters you would extend. The Cartesian product of these parameters define all of the possible tensors you can make. Now, not all of these combinations may actually have kernels (who’s got kernels for sparse, quantized tensors on FPGA?) but in *principle* the combination could make sense, and thus we support expressing it, at the very least.
+>
+> There’s one last way you can make an “extension” to Tensor functionality, and that’s write a wrapper class around PyTorch tensors that implements your object type. This perhaps sounds obvious, but sometimes people reach for extending one of the three parameters when they should have just made a wrapper class instead. One notable merit of wrapper classes is they can be developed entirely out of tree.
+>
+> When should you write a tensor wrapper, versus extending PyTorch itself? The key test is whether or not you need to pass this tensor along during the autograd backwards pass. This test, for example, tells us that sparse tensor should be a true tensor extension, and not just a Python object that contains an indices and values tensor: when doing optimization on networks involving embeddings, we want the gradient generated by the embedding to be sparse.
+
+
+
+## Overview
+
+With the increased interest in deep learning in recent years, there has been an explosion of machine
+learning tools. Many popular frameworks such as Caffe [ 1], CNTK [ 2 ], TensorFlow [ 3 ], and
+Theano [ 4], construct a static dataflow graph that represents the computation and which can then be
+applied repeatedly to batches of data. This approach provides visibility into the whole computation
+ahead of time, and can theoretically be leveraged to improve performance and scalability. However, it
+comes at the cost of ease of use, ease of debugging, and flexibility of the types of computation that
+can be represented.
+Prior work has recognized the value of dynamic eager execution for deep learning, and some recent
+frameworks implement this define-by-run approach, but do so either at the cost of performance
+(Chainer [ 5]) or using a less expressive, faster language (Torch [6], DyNet [ 7]), which limits their
+applicability.
+However, with careful implementation and design choices, dynamic eager execution can be achieved
+largely without sacrificing performance. This paper introduces PyTorch, a Python library that
+performs immediate execution of dynamic tensor computations with automatic differentiation and
+GPU acceleration, and does so while maintaining performance comparable to the fastest current
+libraries for deep learning. 
+
+
+
+## everything is a just a program
+
+
+
+Since PyTorch programs execute eagerly, all the features of Python are available throughout the
+whole design process. Print statements, standard debuggers, and common visualization tools like
+matplotlib all work as expected. Users do not have to wait for lengthy compilation before they can
+start running their programs, and more importantly intermediate computations can be observed to
+understand how a model works and whether its results are correct.
+
+
+
+## Interoperability and extensibility
+
+Easy and efficient interoperability is one of the top priorities for PyTorch because it opens the
+possibility to leverage the rich ecosystem of Python libraries as part of user programs. Hence,
+PyTorch allows for bidirectional exchange of data with external libraries. For example, it provides
+a mechanism to convert between NumPy arrays and PyTorch tensors using the torch.from_numpy()
+function and .numpy() tensor method.
+
+## 自动微分
+
+**定义**：自动微分是一种利用计算机程序将复杂的函数分解为一系列基本算术运算（加、减、乘、除）和初等函数（ sin⁡,exp⁡,log⁡sin,exp,log 等），然后系统地应用**链式法则（Chain Rule）**来计算导数的技术。
+
+- **精度**：机器精度（Machine Precision），无数值误差。
+- **效率**：计算梯度的复杂度通常与计算函数值的复杂度同阶 *O*(1) 倍。
+
+## *Separate control and data flow
+
+PyTorch maintains a strict separation between its control (i.e. program branches, loops) and data flow
+(i.e. tensors and the operations performed on them). The resolution of the control flow is handled
+by Python and optimized C++ code executed on the host CPU, and result in a linear sequence of
+operator invocations on the device. Operators can be run either on CPU or on GPU.
+
+## *Custom caching tensor allocator
+
+**Problem**: Almost every operator must dynamically allocate an output tensor to hold the result of its execution.
+It is therefore critical to optimize the speed of the dynamic memory allocators. 
+
+**Solution**: one-pool-per-stream
+
+## Reference counting
+
+**Problem**: Users often design their models to utilize all memory available during training, and increasing batch
+sizes is a common technique of speeding up the process. Therefore, to deliver great performance,
+PyTorch has to treat memory as a scarce resource that it needs to manage carefully.
+
+**Solution**: use ref-counting instead of GC because in GC, there is a delay between last-use and the memory deallocation
+
+
+
+## What is Computational graph
+
+Example (one-layer neural network):
+
+```python
+import torch
+
+x = torch.ones(5)  # input tensor
+y = torch.zeros(3)  # expected output
+w = torch.randn(5, 3, requires_grad=True)
+b = torch.randn(3, requires_grad=True)
+z = torch.matmul(x, w)+b
+loss = torch.nn.functional.binary_cross_entropy_with_logits(z, y)
+```
+
+This code defines the following **computational graph**:
+
+![img](../assets/images/comp-graph.png)
+
+Conceptually, autograd keeps a record of data (tensors) and all executed operations (along with the resulting new tensors) in a directed acyclic graph (DAG) consisting of [Function](https://pytorch.org/docs/stable/autograd.html#torch.autograd.Function) objects. In this DAG, leaves are the input tensors, roots are the output tensors. By tracing this graph from roots to leaves, you can automatically compute the gradients using the chain rule.
+
+
+
+In a forward pass, autograd does two things simultaneously:
+
+- run the requested operation to compute a resulting tensor
+- maintain the operation’s *gradient function* in the DAG.
+
+The backward pass kicks off when `.backward()` is called on the DAG root. `autograd` then:
+
+- computes the gradients from each `.grad_fn`,
+- accumulates them in the respective tensor’s `.grad` attribute
+- using the chain rule, propagates all the way to the leaf tensors.
+  ```python
+  loss.backward()
+  print(w.grad)
+  print(b.grad)
+  ```
+
+## Computational graph is dynamic in PyTorch
+
+When we say a Directed Acyclic Graph (DAG) is **dynamic** in PyTorch, it means the graph is built from scratch every time you perform a forward pass.
+
+
+
+### How It Works: The "Define-by-Run" Approach
+
+In older frameworks (like TensorFlow 1.x), you had to define the entire structure of your neural network first, compile it, and then feed data into it. In PyTorch, the graph isn't a fixed blueprint; it's a **trail of breadcrumbs** left behind by your operations.
+
+1. **Tracking Operations:** As you perform math on tensors (e.g., `z = x + y`), PyTorch records that operation and its inputs.
+2. **Building the Graph:** Each operation creates a node in a temporary graph.
+3. **Automatic Differentiation:** When you call `.backward()`, PyTorch traverses this specific "trail" in reverse to calculate gradients.
+4. **Garbage Collection:** Once the backward pass is done, the graph is usually destroyed, freeing up memory to build a brand-new one for the next iteration.
+
+------
+
+### Why is this a big deal?
+
+The dynamic nature of PyTorch’s DAG offers a few "superpowers" that make it a favorite for researchers:
+
+- **Pythonic Control Flow:** You can use standard Python `if` statements, `for` loops, and recursion. Since the graph is built during execution, you can change the network's behavior based on the data itself.
+  - *Example:* A Recurrent Neural Network (RNN) processing sentences of different lengths doesn't need "padding" to a fixed size; the graph just grows to match the sentence length.
+- **Easier Debugging:** Because the graph is built as the code runs, you can use standard Python debuggers (like `pdb` or simple `print` statements). If an error happens, it happens exactly where your code is executing, not inside a pre-compiled "black box" graph.
+- **Flexibility:** It allows for complex architectures like **Stochastic Computation Graphs** or **Tree-structured LSTMs** where the connectivity might change for every single input.
+
+### The Trade-off
+
+While dynamic graphs are incredibly flexible, they can be slightly slower than static graphs because of the overhead of rebuilding the graph every time. However, PyTorch has introduced features like **TorchScript** and **torch.compile** to bridge this gap, allowing you to turn your dynamic code into a static, optimized graph when you're ready for production.
+
+
+
+## Autograd
+
+
+
+## torch.compile
+
+## torch.export
+
+## PyTorch ATen
+
+**ATen** stands for "**A TENsor library**".
+
+## **PyTorch Dispatcher** (aka **C10 Dispatcher**)
+
+https://github.com/pytorch/rfcs/blob/master/RFC-0020-Lightweight-Dispatch.md
+
+https://blog.ezyang.com/2020/09/lets-talk-about-the-pytorch-dispatcher/
+
+## FX
+
+## [TorchDynamo](https://docs.pytorch.org/docs/main/user_guide/torch_compiler/torch.compiler_dynamo_deepdive.html)
+
+
+
+## PrivateUse1
+
+**`PrivateUse1`** is PyTorch's "spare key" for hardware. It is a reserved slot in the internal dispatcher that allows third-party hardware vendors (like Huawei's Ascend NPU, Cambricon, or startup accelerators) to integrate their chips into PyTorch without needing to modify the core PyTorch codebase.
+
+------
+
+### The Motivation: Breaking the "CUDA Monarchy"
+
+For a long time, PyTorch was heavily coupled with CUDA. If a new hardware company wanted their chip to work with PyTorch, they basically had two bad options:
+
+1. **Fork PyTorch:** Maintain their own version of the entire library (extremely expensive and hard to keep updated).
+2. **Request a Native Key:** Ask the PyTorch maintainers to add a new `DeviceType` (like `CPU`, `CUDA`, `MPS`) specifically for them.
+
+PyTorch maintainers can't add a new name for every single startup or niche chip—it would bloat the core code and make it unmaintainable. **`PrivateUse1`** was created as a **generic, "private" entry point** that any hardware vendor can "claim" to make their device feel like a first-class citizen in PyTorch.
+
+------
+
+### The Story: From "Placeholder" to "Professional"
+
+Historically, `PrivateUse1` existed as a simple placeholder, but it was barely functional. Starting around **2023**, a massive effort (led in part by the community and vendors like Huawei) transformed it into a robust integration mechanism.
+
+- **The "Rename" Trick:** Vendors can use `PrivateUse1` but tell PyTorch to call it something else in Python. For example, Huawei's **Ascend NPU** registers itself to `PrivateUse1` but exposes the name `npu` to the user.
+- **Feature Parity:** Recent updates (PyTorch 2.1+) have added support for **AMP (Automatic Mixed Precision)**, **Distributed Training (DDP)**, and **Profiler** integration specifically for `PrivateUse1`.
+- **The "Out-of-Tree" Movement:** The goal is that you should be able to `pip install torch-npu` and suddenly `torch.randn(5).to("npu")` just works, without the main PyTorch developers ever having to see a single line of NPU-specific code.
+
+------
+
+### Timeline: When was it introduced?
+
+- **The Placeholder (Pre-1.0):** The concept of "PrivateUse" keys has existed in the C++ backend for years as a fallback for internal testing.
+- **The Formalization (2022-2023):** The push to make it a viable third-party integration tool gained steam with **PyTorch 2.0**.
+- **The Major RFCs:**
+  - **RFC-0020 (Lightweight Dispatch):** Laid the groundwork for moving away from hardcoded device types.
+  - **Issue #98406 (2023):** A major community effort to "Contribute to the privateuse1 backend" to facilitate third-party hardware access.
+  - **PyTorch 2.4+ (2024-2025):** Added support for advanced features like **Graph Capture** and **Inductor (Compiler)** integration for these backends.
+
+------
+
+### Summary: The Hardware Lifecycle
+
+| **Stage**                 | **Description**                                              |
+| ------------------------- | ------------------------------------------------------------ |
+| **Old Way**               | Hardware vendor forks PyTorch and stays stuck on version 1.12 forever. |
+| **New Way (PrivateUse1)** | Vendor writes a "C++ Extension" that registers kernels to the `PrivateUse1` key. |
+| **Result**                | Users can use the latest PyTorch with the new hardware immediately. |
+
+**Would you like to see a code snippet of how a custom backend registers an "Addition" operator to the `PrivateUse1` dispatch key?**
+
+
+
+## / 目录结构
+
+* [c10](c10) - Core library files that work everywhere, both server
+  and mobile. We are slowly moving pieces from [ATen/core](aten/src/ATen/core)
+  here. This library is intended only to contain essential functionality,
+  and appropriate to use in settings where binary size matters. (But
+  you'll have a lot of missing functionality if you try to use it
+  directly.)
+* [aten](aten) - C++ tensor library for PyTorch (no autograd support)
+  * [src](aten/src) - [README](aten/src/README.md)
+    * [ATen](aten/src/ATen)
+      * [core](aten/src/ATen/core) - Core functionality of ATen. This
+        is migrating to top-level c10 folder.
+      * [native](aten/src/ATen/native) - Modern implementations of
+        operators. If you want to write a new operator, here is where
+        it should go. Most CPU operators go in the top level directory,
+        except for operators which need to be compiled specially; see
+        cpu below.
+        * [cpu](aten/src/ATen/native/cpu) - Not actually CPU
+          implementations of operators, but specifically implementations
+          which are compiled with processor-specific instructions, like
+          AVX. See the [README](aten/src/ATen/native/cpu/README.md) for more
+          details.
+        * [cuda](aten/src/ATen/native/cuda) - CUDA implementations of
+          operators.
+        * [mps](aten/src/ATen/native/mps) - MPS implementations of
+          operators for Apple's Metal GPU family.
+        * [sparse](aten/src/ATen/native/sparse) - CPU and CUDA
+          implementations of COO sparse tensor operations
+        * [mkl](aten/src/ATen/native/mkl) [mkldnn](aten/src/ATen/native/mkldnn)
+          [miopen](aten/src/ATen/native/miopen) [cudnn](aten/src/ATen/native/cudnn)
+          - implementations of operators which simply bind to some
+            backend library.
+        * [quantized](aten/src/ATen/native/quantized/) - Quantized tensor (i.e. QTensor) operation implementations. [README](aten/src/ATen/native/quantized/README.md) contains details including how to implement native quantized operations.
+* [torch](torch) - The actual PyTorch library. Everything that is not
+  in [csrc](torch/csrc) is a Python module, following the PyTorch Python
+  frontend module structure.
+  * [csrc](torch/csrc) - C++ files composing the PyTorch library. Files
+    in this directory tree are a mix of Python binding code, and C++
+    heavy lifting. Consult `setup.py` for the canonical list of Python
+    binding files; conventionally, they are often prefixed with
+    `python_`. [README](torch/csrc/README.md)
+    * [jit](torch/csrc/jit) - Compiler and frontend for TorchScript JIT
+      frontend. [README](torch/csrc/jit/README.md)
+    * [autograd](torch/csrc/autograd) - Implementation of reverse-mode automatic differentiation. [README](torch/csrc/autograd/README.md)
+    * [api](torch/csrc/api) - The PyTorch C++ frontend.
+    * [distributed](torch/csrc/distributed) - Distributed training
+      support for PyTorch.
+* [tools](tools) - Code generation scripts for the PyTorch library.
+  See [README](tools/README.md) of this directory for more details.
+* [torchgen](torchgen) - contains the logic and tooling for generating PyTorch's low-level C++ and Python bindings from operator definitions, typically specified in native_functions.yaml
+* [test](test) - Python unit tests for PyTorch Python frontend.
+  * [test_torch.py](test/test_torch.py) - Basic tests for PyTorch
+    functionality.
+  * [test_autograd.py](test/test_autograd.py) - Tests for non-NN
+    automatic differentiation support.
+  * [test_nn.py](test/test_nn.py) - Tests for NN operators and
+    their automatic differentiation.
+  * [test_jit.py](test/test_jit.py) - Tests for the JIT compiler
+    and TorchScript.
+  * ...
+  * [cpp](test/cpp) - C++ unit tests for PyTorch C++ frontend.
+    * [api](test/cpp/api) - [README](test/cpp/api/README.md)
+    * [jit](test/cpp/jit) - [README](test/cpp/jit/README.md)
+    * [tensorexpr](test/cpp/tensorexpr) - [README](test/cpp/tensorexpr/README.md)
+  * [expect](test/expect) - Automatically generated "expect" files
+    which are used to compare against expected output.
+  * [onnx](test/onnx) - Tests for ONNX export functionality,
+    using both PyTorch and Caffe2.
+* [caffe2](caffe2) - The Caffe2 library.
+  * [core](caffe2/core) - Core files of Caffe2, e.g., tensor, workspace,
+    blobs, etc.
+  * ...
+
+
+## /torch 目录结构
+
+**Core Functionality**
+
+- **autograd/** - Automatic differentiation system for computing gradients; includes profilers, graph utilities, and grad mode management
+- **nn/** - Neural network modules and layers (Linear, Conv2d, RNN, etc.) and functional operations
+- **optim/** - Optimizer implementations (SGD, Adam, AdamW, LBFGS, etc.) and learning rate schedulers
+
+**Computation & Operations**
+
+- **linalg/** - Linear algebra operations (matrix decompositions, solving systems, etc.)
+- **fft/** - Fast Fourier Transform operations
+- **sparse/** - Sparse tensor support and operations
+- **special/** - Special mathematical functions
+- **signal/** - Signal processing utilities
+
+**Hardware Acceleration & Backends**
+- **cuda/** - CUDA-specific utilities, memory management, streams, profiling, NCCL communication
+- **mps/** - Metal Performance Shaders for Apple Silicon
+- **cpu/** - CPU-specific kernel implementations
+- **xpu/** - Intel GPU support
+- **mtia/** - Meta Training and Inference Accelerator support
+- **backends/** - Abstract backend implementations for different devices (CUDA, MKLDNN, CoreML, etc.)
+
+**Training & Optimization**
+- **amp/** - Automatic Mixed Precision for memory-efficient training and gradient scaling
+- **distributed/** - Distributed training utilities (FSDP, DDP, RPC, elastic launch, checkpointing)
+- **ao/** - Architecture optimization (pruning, quantization, neural architecture search)
+- **quantization/** - Quantization framework (both static and dynamic, fake quantization, FX-based)
+
+**Model Compilation & Export**
+- **jit/** - TorchScript JIT compiler for script/trace-based compilation and optimization
+- **fx/** - FunctionalizationTransformer for capturing tensor computations as graphs
+- **export/** - ExportedProgram API for model portability and deployment
+- **onnx/** - ONNX format export and compatibility layer
+- **compiler/** - Compiler infrastructure (likely for torch.compile/inductor)
+
+**Data & Probabilistic Computing**
+- **distributions/** - Probability distributions (Normal, Beta, Categorical, etc.) and KL divergence
+- **multiprocessing/** - Multiprocessing utilities for data loading and training
+
+**Development & Testing**
+- **testing/** - Testing utilities and comparison functions
+- **profiler/** - Performance profiling tools (CPU, CUDA profilers, ITT integration)
+- **utils/** - General utilities (serialization, data loading, extensions, etc.)
+
+**Specialized/Advanced**
+- **masked/** - Masked tensor operations
+- **nested/** - Nested tensor support
+- **func/** - Functional programming utilities
+- **futures/** - Async/futures support
+- **accelerator/** - Device and accelerator management
+- **monitor/** - Performance monitoring
+- **legacy/** - Deprecated APIs maintained for backwards compatibility
+- **contrib/** - Community contributions or experimental features
+- **package/** - Model packaging and bundling
+- **lib/** - Core library code
+- **headeronly/** - Header-only utilities
+- **csrc/** - C++ source bindings
+- **nativert/** - Native tensor compiler support
+- **numa/** - NUMA-aware utilities (for multi-socket CPUs)
 
 
 
 
-https://deepwiki.com/pytorch/pytorch
+## References
 
-
-
-
+- https://deepwiki.com/pytorch/pytorch
+- [PyTorch: An Imperative Style, High-Performance Deep Learning Library](https://arxiv.org/pdf/1912.01703) 
+- [TORCH.FX: PRACTICAL PROGRAM CAPTURE AND TRANSFORMATION FOR DEEP LEARNING IN PYTHON](https://arxiv.org/pdf/2112.08429) 
+- [PyTorch 2: Faster Machine Learning Through Dynamic Python Bytecode Transformation and Graph Compilation](https://docs.pytorch.org/assets/pytorch2-2.pdf)
+- [PyTorch internals -- 讲 pytorch 原理的文章，可以好好看看，这个是给 pytorch 社区贡献代码的基础知识](https://blog.ezyang.com/2019/05/pytorch-internals/)
 
