@@ -506,9 +506,7 @@ print(y.shape)       # torch.Size([1024, 1024])
 
 Meta functions are the **shape inference system** for the compiler and symbolic execution stack. Any op that needs to participate in `torch.compile`, `torch.export`, or `device="meta"` must have one.
 
-### PyTorch for TPU
 
-https://github.com/pytorch/xla/issues/9684
 
 ## 四。torch_npu
 
@@ -569,6 +567,10 @@ e/`).
 - Maintained in sync via CI that runs daily against `pytorch/pytorch:main`
 - Versioned as `{pytorch_version}-{ascend_version}` (e.g., `v2.6.0-7.3.0`)
 - CANN version must be matched to the extension version
+
+## 五。PyTorch for TPU
+
+https://github.com/pytorch/xla/issues/9684
 
 ## References
 
