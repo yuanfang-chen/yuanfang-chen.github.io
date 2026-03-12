@@ -258,7 +258,7 @@ In summary, `torch.fx` prioritizes ease of use and developer productivity for ML
 
 
 
-### Dynamo
+### TorchDynamo**: Dynamic Python Bytecode Transformation**
 
 Dynamo tracing is spread across several files in [torch/_dynamo/](vscode-webview://05ae4l0dinki967cd4fcokgkc205cpm98srb0hr8i7binord5l30/torch/_dynamo/). Here's the architecture from top to bottom:
 
@@ -340,6 +340,60 @@ torch.compile(fn)
   → backend compiler receives FX graph (e.g. Inductor)
   → rewritten bytecode cached and executed
 ```
+
+
+
+### TorchInductor: The Compiler Backend
+
+Once TorchDynamo (via AOTAutograd) produces a clean FX graph, it passes it to TorchInductor. TorchInductor translates this graph into OpenAI's Triton for GPUs and C++/OpenMP for CPUs.
+
+#### Decompositions
+
+First, complex PyTorch operators are broken down into a core set of primitive operations (e.g., decomposing `log2(x)` into `log(x) * 1/log(2)`). This drastically reduces the surface area the compiler needs to support.
+
+#### Define-by-Run Loop-Level IR
+
+TorchInductor lowers the decomposed FX graph into a unique, loop-level Intermediate Representation (IR).
+
+- It defines tensor computations using executable Python code closures (e.g., calculating a single element via `inner_fn_buf0(index)`).
+- It utilizes exactly 54 primitive operators within a virtualized `ops.*` namespace (`ops.load`, `ops.store`, `ops.reduction`, `ops.masked`, etc.).
+- It wraps buffers in `TensorBox` and `StorageBox` to perfectly emulate PyTorch eager mode's complex aliasing, mutation, and viewing semantics.
+
+#### Scheduling and Operator Fusion
+
+The biggest source of speedups in TorchInductor comes from **Operator Fusion**—combining pointwise, reduction, and scatter kernels into a single kernel to eliminate trips to GPU memory.
+
+1. Every buffer is mapped to a `SchedulerNode`.
+2. The memory read/write access patterns are converted into strict dependency edges using symbolic SymPy addresses to determine if a fusion is mathematically legal.
+3. A greedy algorithm continually evaluates all valid fusion opportunities. It scores them using `Scheduler.score_fusion(node1, node2)`, prioritizing fusions that save the most memory traffic.
+
+#### Code Generation (Codegen)
+
+- **Triton (GPU):** TorchInductor maps the IR to Triton code. It simplifies indexing to contiguous memory loads where possible and handles Common Subexpression Elimination (CSE). For reductions, it emits either persistent Triton reductions (loaded in a single block) or loop-based accumulators. For matrix multiplications and convolutions, it uses Jinja templates to mix handwritten Triton code with pointwise epilogue fusions.
+- **C++ (CPU):** Generates C++ utilizing OpenMP `#pragma omp for` parallelization. It generates a vectorized variant (using PyTorch's `at::vec::Vectorized` operating on 16 elements at a time across SIMD instructions) and a standard STL fallback.
+- **Wrapper & CUDA Graphs:** To eliminate the Python overhead of launching these generated kernels, TorchInductor generates host-side wrapper code in Python or C++. For maximum performance (`mode="reduce-overhead"`), it utilizes **CUDA Graphs** to record and replay the exact kernel launch sequence directly at the CUDA driver level.
+
+
+
+### Hook custom op
+
+To hook a custom operator for a private accelerator into TorchInductor and the broader `torch.compile` stack, you must integrate it across a few specific stages of the PyTorch 2 compilation pipeline.
+
+Here is how you can approach this based on the internal architecture of PyTorch 2:
+
+**1. Register a Meta Function for Graph Capture (TorchDynamo)** Before TorchInductor processes your custom operator, TorchDynamo must successfully capture it into an FX graph without triggering a "graph break". To achieve this, you must define a **meta function** for your custom operator. Meta functions act as symbolic shape formulas; they propagate the output shape and data type of the tensor without actually performing the underlying hardware computation. This allows TorchDynamo to track the operator and reason about dynamic shapes safely.
+
+**2. Provide Operator Decompositions (Optional)** If your custom operator is a high-level composite that can be expressed using simpler PyTorch primitives that your accelerator already supports, you can decompose it during the AOTAutograd phase. You do this by writing a Python function that implements the operator and annotating it with the `@register_decomposition` decorator.
+
+**3. Define Lowerings and Extern Kernels (TorchInductor)** Once the FX graph reaches TorchInductor, it is lowered into a define-by-run, loop-level intermediate representation (IR).
+
+- **Avoid Fallbacks:** By default, if TorchInductor encounters an operator it does not know how to lower, it automatically converts it into a "fallback kernel node" that breaks out and runs the original PyTorch eager code.
+- **User-Defined Kernels:** To execute the operator natively on your accelerator, you can write a lowering that maps your operator to an **`ExternKernelSchedulerNode`**. During TorchInductor's scheduling phase, this specific node type is used to represent and order calls to external library code or custom user-defined kernels.
+
+**4. Intercept the Code Generation for your Hardware** By default, TorchInductor generates OpenAI Triton code for GPUs and C++/OpenMP for CPUs. To target a private accelerator, you have two primary extension points:
+
+- **Override the `ops.\*` namespace:** TorchInductor's IR relies on a virtualized `ops.*` namespace (e.g., `ops.load`, `ops.store`, `ops.mul`). You can dynamically override this namespace to point to a custom code generation pass that writes out the specific device code or assembly required by your accelerator.
+- **Use a Custom Backend:** If your hardware requires an entirely different compilation and memory planning stack (such as ASIC or TPU lowering), you can bypass TorchInductor's default codegen entirely. You can provide a custom compilation function via the `backend=` keyword argument in `torch.compile(model, backend=my_custom_backend)`. Your custom backend function will receive the `torch.fx.Graph` and example inputs, allowing you to lower the graph directly to your accelerator's runtime.
 
 
 
