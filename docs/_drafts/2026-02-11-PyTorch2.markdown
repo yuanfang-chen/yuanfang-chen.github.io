@@ -583,5 +583,4 @@ https://github.com/pytorch/xla/issues/9684
 - [PyTorch 2.0 & XLA—The Latest Cutting Edge Features](https://pytorch.org/blog/pytorch-2-0-xla/)
 - [TorchDynamo(torch.compile) integration in PyTorch XLA](https://docs.pytorch.org/xla/master/torch_compile.html)
 - [OpenReg](https://pytorch.org/blog/openreg-a-self-contained-pytorch-accelerator-simulator/)
-- 
 
