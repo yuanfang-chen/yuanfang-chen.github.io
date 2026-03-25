@@ -17,7 +17,15 @@ The most important decision is **which problem shapes to benchmark**. You need c
 
 **Data type matrix:**
 
-| Compute type | Input A | Input B | Output | Accumulator | Notes | |---|---|---|---|---| | FP16×FP16 | FP16 | FP16 | FP16 | FP32 | Baseline | | BF16×BF16 | BF16 | BF16 | BF16 | FP32 | Training-common | | FP16 mixed | FP16 | FP16 | FP32 | FP32 | High-precision | | INT8×INT8 | INT8 | INT8 | INT32 | INT32 | W8A8 quantized | | INT8×INT4 | INT8 | INT4 | INT16 | INT32 | W4A8 (your OKR) | | FP32×FP32 | FP32 | FP32 | FP32 | FP32 | Reference/fallback |
+| Compute type | Input A | Input B | Output | Accumulator | Notes |
+|---|---|---|---|---|---|
+| FP16×FP16 | FP16 | FP16 | FP16 | FP32 | Baseline |
+| BF16×BF16 | BF16 | BF16 | BF16 | FP32 | Training-common |
+| FP16 mixed | FP16 | FP16 | FP32 | FP32 | High-precision |
+| INT8×INT8 | INT8 | INT8 | INT32 | INT32 | W8A8 quantized |
+| INT8×INT4 | INT8 | INT4 | INT16 | INT32 | W4A8 (your OKR) |
+| FP32×FP32 | FP32 | FP32 | FP32 | FP32 | Reference/fallback |
+
 
 **Epilogue combinations** (test each with representative shapes):
 
